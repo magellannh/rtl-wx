@@ -1,0 +1,13 @@
+*.o
+
+bin/rtl-wx
+
+bin/rtl-433
+
+src/rtl-wx
+
+src/rtl-433
+
+src/librtlsdr
+
+doc/Oregon Scientific Documentation
