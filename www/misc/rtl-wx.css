@@ -1,0 +1,18 @@
+BODY, table, TD { color : black; font: normal 9pt Arial,Helvetica,sans-serif; }
+H2  { color: black; background: white; font: bold 14pt Arial,Helvetica,sans-serif; }
+H3  { color: white; background: black; font: bold 14pt Arial,Helvetica,sans-serif; }
+TH  { color: white; background: black; text-align: right; font: bold 10pt Arial,Helvetica,sans-serif; }
+BIG { font: bold 15pt Arial,Helvetica,sans-serif; }
+.fwversion { color: white; font: normal 8pt Arial,Helvetica,sans-serif; }
+a.textbutton { background: #42498c; color : white; font: bold 9pt Arial,Helvetica,sans-serif; text-decoration: none;}
+.mainmenu   { color: white; font: bold 8pt Arial,Helvetica,sans-serif; text-decoration: none;}
+a.submenu   { color: white; font: normal 8pt Arial,Helvetica,sans-serif; text-decoration: none;}
+a.submenu:hover { color: #00ffff; }
+A:hover {color: #00FFFF}
+.divider    { color: white; font: bold 10pt Courier New,Courier,serif; text-decoration: none;}
+.pname { color : white; font: normal 16pt Arial,Helvetica,serif; text-decoration: none;}
+.mname { color : white; background: black; font: bold 8pt Arial,Helvetica,sans-serif; text-decoration: none;}
+div.std { margin-left : 20px; }
+.tabtitle  { color: white;  font: normal 8pt Arial,Helvetica,sans-serif; }
+.hlight	{color: red}
+.smsg	  {color:blue; font: bold 10pt Arial,Helvetica,sans-serif; }

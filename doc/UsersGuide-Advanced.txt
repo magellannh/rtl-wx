@@ -1,0 +1,143 @@
+--------------------------------------------------------------------------------
+RTL-Wx Debugging and Advanced Users Guide
+--------------------------------------------------------------------------------
+
+
+This document contains information about the internals of the RTL-Wx software and information for the more technical user.  You should already be familiar with the software and have read the User's Guide before continuing with this document.
+
+
+Overview
+--------
+
+The RTL-Wx software is normally run in server or daemon mode.  However, there are a few other modes of operation that the program also supports.  These allow the program to be run in standalone (or interactive) mode, in client mode, and in remote command mode.  These modes are discussed in detail below.
+
+The code currently supports a handful of Oregon Scientific protocol v2.1 and v3 weather sensors.  Additional sensors could be supported by modifying the RTL-433 module (rtl_433.c) and rtl-wx.c to support them.  Support is based on the "sensor id" sent by each sensor in its periodic 433Mhz transmissions.  Often, multiple OS sensors with different model numbers will have the same sensor id.  The sensor id seems to differentiate the message protocol, type of data, and message structure rather than exact sensor model number.  For example, the THGR268 and THGN122N and THGR123N are all temp/humidity sensors that use sensor ID 0x1d20 and use the same message format. 
+
+
+--------------------------------------------------------------------------------
+RTL-Wx Operational Modes
+--------------------------------------------------------------------------------
+
+Server Mode
+-----------
+
+rtl-wx is normally run in server mode.  In server mode, the program doesn't use stdin or stdout.  Instead, any necessary output is sent to a log file.  Any errors that occur before the logfile is opened are reported through stderr.  When the server starts, it opens a pair of pipes in /tmp to allow a client to connect to send commands to the server and receive the server's output.
+
+Command Line Example: rtl-wx -w <path to www directory>
+
+The path to www directory parameter is optional and tells the program where to find the rtl-wx.conf file and where to put files such as the log file and the webcam image file.  It serves as the working directory when the program is running.  When the program is invoked at startup, this path must be fully specified from root.  (If not specified, the path is assumed to be ../www)
+
+Standalone Mode
+---------------
+
+When invoked with the -s option, the program starts in Standalone mode.  In this mode, the program attempts to interact with the user through stdin and stdout.  This mode can be handy for troubleshooting and debugging.  The command line to invoke the program in standalone mode is as follows:
+
+Command Line Example: rtl-wx -s  (example of standalone invocation from rtl-wx/bin folder)
+
+
+Client Mode
+-----------
+
+When started in client mode, rtl-wx attempts to connect to another rtl-wx instance running in server mode using pipes in /tmp.  In this mode, the client accepts keyboard input from the user and sends it to the server.  The response from the server is received by the client and displayed to stdout for the user.  This allows a client to be started and stopped repeatedly as well as controlled without interfering with the server's data collection and reporting activities.  
+
+Command Line Example: rtl-wx -c
+
+
+Remote Command Mode
+-------------------
+
+Remote command mode is very similar to client mode, except that instead of accepting commands from stdin, the program accepts a single character command from the command line, sends it to the server, waits for a server response, and sends the server response to stdout.   This mode is used by the rtl-wx/www cgi web helper scripts to implement the embedded web control interface.
+
+Command Line Example: rtl-wx -r d (connects to the server and commands it to dump status information)
+
+
+IMPORTANT NOTE on the Client/Server Model
+-----------------------------------------
+
+The client/server model is very lightweight and is primarily intended for debugging and initial configuration.  During normal operation, user access should probably only be through the web .htm files to view collected data, with minimal access to the web control interface.
+
+The communications model between the client and server uses named pipes and therefore, can only support one instance of a client running at any given time.  This also means that you can't issue a command in remote command mode (or through the web interface) while another instance of the program is running in Client mode, since both use the same named pipe for communications with the server.  In addition, you can't have multiple users simultaneously accessing embedded web server pages that send remote commands to the SlugWx server (since each outstanding command runs using a separate client instance).
+
+
+--------------------------------------------------------------------------------
+RTL-Wx Operational Description
+--------------------------------------------------------------------------------
+
+When invoked in server mode, the rtl-wx program opens the usb-rtl-sdr device and waits for incoming weather sensor data.  Data from sensors is assembled into messages, processed, and stored as weather data based on the sensor type.  In addition, the program periodically saves off data to create a historical weather data record.  It also updates max/min data each time a new record is saved off.
+
+In addition to gathering weather data, the program runs a scheduler to handle periodic processing tasks.  
+
+These additional processing tasks include periodically:
+1) Reloading the configuration file (rtl-wx.conf) to check for changes
+2) Saving off a snapshot of the current set of weather data and updating max/min values.
+3) Running a Tag-File parser to produce output files with current weather data in them.
+4) Taking an image snapshot using an attached webcam (optional)
+5) Uploading specified files to a remote FTP site
+
+You can alter the frequency that each of these operations is performed by changing settings in the rtl-wx.conf file.
+
+The rtl-wx server software conducts most of its processing responsibilities from a single control loop.  The main server code, including user input, scheduling, file parsing, and ftp operations is run from a single thread.  The rtl_433 message reception from the usb-rtl-sdr device is done in a separate thread.  This thread is the 'producer' of weather data that gets consumed by other rtl-wx software, so no thread locking is implemented or required.
+
+---------------
+Program Modules
+---------------
+
+
+rtl-wx.c  (rtl-wx.h)
+--------------------
+
+rtl-wx.c contains the "main" for the program and has the main processing loops for both Server/Standalone mode and for client mode.  This module is the locust of control for the entire program.  The main processing loop kicks off weather data processing, scheduler operations, and processing of user commands.
+
+rtl-wx.c receives weather data through two callbacks that are invoked by the rtl_433 usb-rtl-sdr module.  These two routines (one for good sensor data, one to log errors) are called when the rtl_433 module receives data from a supported weather sensor so the data can be recorded.
+
+Also, rtl-wx.c is the only module that accepts user input, which is done either from stdin (in standalone or client modes) or by reading the client send pipe (in server mode).
+
+For output, rtl-wx.c configures an output file descriptor that other modules may write output to, but they don't have knowledge of whether they are writing output to stdout or to a remote client (using a pipe).
+
+ConfProc.c
+----------
+
+The ConfProc.c module handles reading and processing the user configuration file (rtl-wx.conf) and updating a global configuration structure with the results.  This structure contains global settings such as the frequency to do certain processing tasks, information about how to access a remote FTP server, as well as other global vars.
+
+Regardless of the setting of this date and time control, the Slug system clock is always used for scheduling of background processing (see below).
+
+
+Scheduler.c
+-----------
+
+The scheduler module is responsible for the timely execution of background processing tasks.  As indicated earlier, the scheduler is called repeatedly by the main processing loop in order to check for tasks that need to be run.  There's no queueing or tasks and all processing is done inline.  The only time consuming operation so far seems to be the FTP upload (which can take several seconds).  During the time when the upload is occurring, client commands are not processed and a user (running a client, or the web) may experience a delay in the responsiveness to user input.
+
+The scheduling algorithm is relatively simple.  The tricky part of the scheduling function is some code that tries to align activities to the time of day clock.  For example, the schedule tries to run operations that occur every 15 minutes on the hour, at 15 past, 30 past, and 45 past.  When an operation is scheduled to run every 5 minutes, the scheduler tries to run it on the hour, at 5 past, at 10 past, etc.
+
+The scheduler provides some debugging information that includes the time each action was last executed, the number of times each action has occurred (since startup), the frequency (as read from the config file), and the time (in minutes) remaining.
+
+
+DataStore.c
+-----------
+
+This module contains routines to support archiving of sensor data.  The functionality includes saving a preset number of complete data records as well as support for saving min and max values for selected data fields
+
+Data records are saved using a first in never out ring buffer.  Once the max number of records to store is reached, saving additional records causes the oldest record to be  overwritten.  Data is never pulled out of the ring, but rather it is replaced by newer data.
+
+Data inside the ring can be referenced by requesting a specific historical record number. historical record 1 returns the newest record.  The larger the record number requested, the older the data.  The largest record number that can be requested is maxRecordCount.
+
+If data for a given sensor was not refreshed during any period between two data snapshots, the data of the second snapshot will indicate that no refreshes have occured.  The implementation of this is handled by the tag processing module through a routine called checkAndHandleNoData().  This routine is called as each weather tag is replaced to validate that the dataStore contains good data to use for that tag.  The routine checks that the timestamp of the data is fresh (compared to the global timestamp of the entire dataset.  
+
+
+TagProc.c (tagProc.h)
+--------------------
+
+The TagProc module handles the processing of text files that contain special SlugWx weather data tags.  These tags are replaced by actual weather sensor data as the contents on the input file are copied to an output file.  This processing capability can be used in conjunction with template html files to produce web pages that contain the data received from the weather station.  These files can be served by the embedded web server and can also be FTP'd to a remote web server.
+
+
+Utils.c
+-------
+
+In addition to a generic timestamp checking function, this module contains several routines that display program data for informational and debug purposes.  These routines are used by the various user commands that stanalone and client mode support as well as by several of the web pages served by the embedded SlugWx web server.
+
+rtl-433.c
+---------
+
+This module interacts with librtlsdr to receive low level sensor data from the usb-rtl dongle.  When a message is received it is 'passed' to rtl-wx.c using a packet_received() callback routine.
+
+

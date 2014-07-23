@@ -1,0 +1,60 @@
+Cross-build rtl-wx for the Netgear R7000 Router running dd-wrt
+--------------------------------------------------------------
+
+The rtl-wx distribution includes a binary for the R7000, so you shouldn't need to recompile unless you want to make changes to source code.
+
+The DD-WRT environment on the R7000 doesn't have a native compiler so a cross-development toolchain is required. The steps below were done on Windows 7 using VirtualBox software running Ubuntu 14.04 in a 2GB Ram and 12GB virtual HDD virtual machine. The VM used was an out of the box base Ubuntu 14.04 install.
+
+Note: If Ubuntu can't see windows shares, add a second network adapter in VirtualBox and set type to Bridged Adapter (maybe also set promiscuious mode allow all?)
+
+1) Copy the R7000 open-wrt toolchain to linux system
+
+The toolchain binaries work on an x86 processor in a linux environment. Download
+and expand the toolchain folder somewhere with greater than 550MB of disk space. 
+
+Get the toolchain binaries from here?
+ftp://bo.mirror.garr.it/pub/1/openwrt/snapshots/trunk/bcm53xx/OpenWrt-Toolchain-bcm53xx-for-arm_cortex-a9-gcc-4.8-linaro_uClibc-0.9.33.2_eabi.tar.bz2
+
+
+2) Build libusb-1.0 on ubuntu (using cross tools)
+
+(I tried to save time and copy libusb-1.0 binary from the R7000 (from opkg) but I got a link error so had to cross compile it even though I still used the actual library from opkg on the R7000, which worked fine)
+
+cd /tmp
+wget http://downloads.sourceforge.net/project/libusb/libusb-1.0/libusb-1.0.9/libusb-1.0.9.tar.bz2
+tar -xf libusb-1.0.9.tar.bz2
+cd libusb-1.0.9
+export TOOLCHAIN=/home/ubuntu/arm-toolchain
+export PATH="$TOOLCHAIN/bin/:$PATH"
+./configure --prefix=/ --host=arm-openwrt-linux
+
+*** KLUDGE - Edit config.h to set #define HAVE_GETTIMEOFDAY 1
+             Do a chmod -w config.h to prevent configure from overwriting it.
+             (without this, library has undefined external refrence that shows up in main link)
+
+make
+sudo make DESTDIR=$TOOLCHAIN install
+
+
+3) Expand/copy rtl-wx folder to ubuntu home folder
+
+4) Download and build librtlsdr in rtl-wx/src/librtlsdr
+
+cd ~
+wget https://github.com/steve-m/librtlsdr/archive/v0.5.3.tar.gz
+tar -xvf v0.5.3.tar.gz
+rm -r rtl-wx/src/librtlsdr
+mv librtlsdr-0.5.3 rtl-wx/src/librtlsdr
+cd rtl-wx/src/librtlsdr
+cp ~/rtl-wx/doc/DDWRT-Instructions/toolchain.cmake .
+mkdir build
+cd build
+export STAGING_DIR=.
+cmake -DCMAKE_TOOLCHAIN_FILE=toolchain.cmake ../
+make
+cd ~/rtl-wx/src
+
+edit Makefile to uncomment variable definitions for R7000 and comment out any definitions for other platforms
+make clean 
+make
+

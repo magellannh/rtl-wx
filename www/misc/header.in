@@ -1,0 +1,30 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+<head>
+<title>RTL-Wx Temperature Monitor</title>
+<meta http-equiv="Page-Enter" content="Alpha(opacity=100)"> <!-- Remove the IE Flashing -->
+<LINK REL="stylesheet" TYPE="text/css" HREF="misc/rtl-wx.css">
+
+</head>
+
+<body link="#B5B5E6" vlink="#B5B5E6" alink="#FFFFFF" marginheight="0" marginwidth="0" leftmargin="0" topmargin="0">
+<DIV align="center">
+<table border="0" cellpadding="0" cellspacing="0" width="850" align="center">
+<tr>
+       <td bgcolor="#683f77" width="165"><a href="index.cgi"><img border="0" src="misc/rtl-wx-linux.png"></a></td>
+        <td width="685" colspan="2" bgcolor="#683f77" valign="center" align="center"><span class="pname">Temperature Monitoring using RTL-SDR w/433mhz sensors&nbsp; &nbsp;</span> &nbsp;&nbsp;</td>
+</tr><tr>
+     <td colspan="2" height="11" bgcolor="black"><img src="misc/tborder.gif" width="100%" height="11" alt="" border="0"></td>
+</tr><tr>
+    <TD width="165" bgcolor="black" align="center"><h3></h3></td>
+	<td width="635" colspan="2" bgcolor="#683f77" valign="top">
+	<table border="0" cellspacing="0" cellpadding="0" width="100%">
+	<tr>
+	 <td align="right" class="fwversion" height="25" colspan="5">INSERT_BUILD_STRING&nbsp;&nbsp; </td>
+	 <td align="center" width="130" class="mname">INSERT_TARGET_STRING</td>
+	</tr>
+	<tr bgcolor="black">
+	<td colspan="6" height="3"><img src="misc/TRANSPAR.GIF" width="1" height="3" alt="" border="0"></td></tr>
+	<tr><td colspan="6" height="1"><img src="misc/TRANSPAR.GIF" width="1" height="4" alt="" border="0"></td></tr>
+<tr>
+	

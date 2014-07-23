@@ -1,0 +1,128 @@
+Installing RTL-Wx on Raspberry Pi
+---------------------------------
+<Steps 1..7 are to install NOOBS on brand new device only, for existing Pi installation, skip to step 8>
+1) Format SD Card using SDFormatter utility
+2) Download NOOBS from raspberryPi.org and copy to SD card
+3) Insert SD card into Pi and boot with monitor/keyboard
+4) Use init menu to create initial config (timezone, ssh, etc)
+5) Remove monitor/keyboard and reboot
+6) Use PuTTy SSH tool to remotely contact pi (login as: pi password: raspberry
+7) Install samba server on pi (only needed to copy files, could download)
+
+sudo apt-get update
+sudo apt-get install samba samba-common-bin
+sudo vi /etc/samba/smb.conf
+
+ a) Find 'security =' and uncomment or change to 'security = user'
+ b) Find '[homes]' and under home directories 
+           set 'read only = no'
+sudo smbpasswd -a pi (type raspberry twice for password)
+sudo /etc/init.d/samba restart
+
+
+8) Copy rtl-wx folder to Raspberry pi home folder
+
+a) Get rtl-wx software and expand to /home/pi/rtl-wx
+
+wget https://github.com/magellan/rtl-wx/archive/v0.1.0.tar.gz
+tar -xvf
+mv v0.1.0.tar.gz rtl-wx
+
+NOTE: If you don't need to modify sources, you can use the prebuilt RaspberryPi binary in rtl-wx/bin and skip steps 8b, and 8c.  In this case, copy rtl-wx and rtl-433 from rtl-wx/bin/RaspberryPi to rtl-wx/bin and also copy rtl-wx/bin/RaspberryPi/header.htm to rtl-wx/www/misc/header.htm.
+
+b) Download and build librtlsdr
+
+cd ~
+wget https://github.com/steve-m/librtlsdr/archive/v0.5.3.tar.gz
+tar -xvf v0.5.3.tar.gz
+mv librtlsdr-0.5.3 rtl-wx/src/librtlsdr
+cd rtl-wx/src/librtlsdr
+mkdir build
+cd build
+cmake ../
+make
+cd ~/rtl-wx/src
+
+
+c) Build rtl-wx
+
+cd ~/rtl-wx/src
+edit Makefile to make sure Raspberry Pi settings are uncommented and all others are commented out
+make clean
+make
+cd ../bin
+
+9) Install apache2 web server (for local web control see sample sites-available/default file)
+
+sudo apt-get install apache2 -y
+sudo vi /etc/apache2/sites-available/default
+  a) Change Document root from /var/www to /home/pi/rtl-wx/www
+  b) Edit the second Directory tag to read as follows
+	
+#  <Directory /var/www/>
+<Directory /home/pi/rtl-wx/www/>
+		
+  Options Indexes MultiViews +ExecCGI
+                
+  AddHandler cgi-script .cgi
+		
+  AllowOverride None
+		
+  Order allow,deny
+		
+  allow from all
+	
+</Directory>
+
+sudo vi /etc/apache2/envvars
+   - Change APACHE_RUN_USER and APACHE_RUN_GROUP to pi
+
+sudo service apache2 restart
+
+Note: if above is done and cgi scripts don't produce any output, it's probably an
+owner/permissions problem when scripts execute rtl-wx.  Check /var/log/apache2/error.log
+- The cgi scripts run from the directory /pi/home/rtl-wx/www as user www-usr
+- Make sure o+rx permission is set for directories rtl-wx, www, and files as needed.
+
+Finally, there's a rtl-wx web command to reboot the device and this requires root or sudo permission.  To enable the apache user to do a reboot, edit /etc/sudoers using "sudo visudo -f /etc/sudoers" to add the following line at the end: www-data ALL = NOPASSWD: /sbin/reboot
+(Obviously this could have serious security implications, so it's up to you if you want to do this).
+
+10) Install ncftp FTP command line utility
+sudo apt-get install proftpd-basic ncftp
+
+
+11) Webcam setup (Optional)
+
+Tried to get old logitech 3000 webcam to work without success but had success with newer Logitech Webcam C905 using fswebcam utility.
+
+sudo apt-get install fswebcam
+
+to test: fswebcam -r 640x480 webcam.jpg
+can also use: fswebcam -r 1280x720 --no-banner webcam.jpg
+
+12) Install NooElec RTL-SDR USB Dongle (rtl2832u w/ R820T)
+
+a) (use apt-get install to install any missing libs)
+b) copy rtl-sdr.rules from src/librtlsrc/src folder to /etc/udev/rules.d/15-rtl-sdr.rules (maybe don't need to rename?)
+
+d) blacklist device so kernel doesn't claim it
+sudo vi /etc/modprobe.d/raspi-blacklist.conf
+add the following lines:
+  blacklist dvb_usb_rtl28xxu
+  blacklist rtl2832
+  blacklist rtl2830
+  blacklist rtl2838
+ 
+sudo reboot
+
+had good  luck with rdl-433 using:
+./rtl-433 -f 433810000 -l 7000
+
+(USB SDR dongles seem to have some variation in their crystals so experimenting with freq offsets may help)
+
+13) Edit /etc/rc.local to launch RTL-Wx at startup.
+
+/home/pi/rtl-wx/bin/rtl-wx -w /home/pi/rtl-wx/www&
+
+
+

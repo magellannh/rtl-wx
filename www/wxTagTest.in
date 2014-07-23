@@ -1,0 +1,169 @@
+------------------------------------------------------------------------------------------
+
+                      SlugWx WEATHER STATION SOFTWARE TAG REPLACEMENT TEST FILE
+
+This file is for testing the SlugWx _9X8 weather station software file parser and it makes a good
+reference source for checking out all the tags that are supported by the wmr program.  It was created to
+exercise all of the possible code paths of the parser.  It does this by using all (or nearly all) of
+the possible tags.  Also, since the tags contain embedded formatting options, it also tries to
+use each possible option at least once in the file.
+
+------------------------------------------------------------------------------------------
+The Basics:
+
+The general format for a tag is to start with a ^ character, then continue with the text WXTAG_.  This is followed by the name of the sensor that the tag refers, or some special strings that are described below. (often the start and end ^ characters are omitted in the examples)
+
+The sensors that can be used in tags are:
+WG (wind gauge), RG (rain gauge), IDU (indoor temp unit), ODU (outdoor temp unit) EXTx (extra sensors 1-3).
+
+The easiest way to understand the tag format is to look at example tags along with a parsed output file produced using them (with real data substituted for the tags).  A few examples are shown just to cover the basics:
+
+Some example tag features: (if you see ^WXTAG...^ tags below, look at the output file instead)
+
+WXTAG_IDU_TEMP       returns ^WXTAG_IDU_TEMP^ (notice that the default is degrees F)
+WXTAG_IDU_TEMP_C     returns ^WXTAG_IDU_TEMP_C^ (here the temp is converted to Celcius)
+WXTAG_IDU_PRESSURE   returns ^WXTAG_IDU_PRESSURE^ (the default for pressure is mbar) 
+WXTAG_IDU_PRESSURE_I returns ^WXTAG_IDU_PRESSURE_I^ (here's pressure in inches) 
+WXTAG_IDU_PRESSURE_M returns ^WXTAG_IDU_PRESSURE_M^  (and in mm/h)
+
+Nearly all of the values and formats available for display on the weather station touchscreen can be accessed through a tag.  You may need to specify a units conversion as in the cases above to get the output you desire.
+
+If data was not gathered for a particular sensor (either due a reception problem or because the program hasn't been running long enough), dashes are returned by default instead of the number for the field.  You can override this behavior with the WXTAG_GLOBAL_NODATA tag.  This tag doesn't get replaced with a value (it gets stripped), but it does affect the behavior of the parser for the rest of the file.  If you want to have 0 returned when there's no data, instead of dashes, you can use WXTAG_GLOBAL_NODATA_0.  You can even specify a string to use in no data cases by using WXTAG_GLOBAL_NODATA_S-999.  This last tag causes the parser to substitute the string -999 any time a tag is encountered and no data has been gathered for it.
+
+Another important capability of the tag replacement processor is the ability to access data from historical weather data records.  By default, the complete weather station data set is captured and saved every 15 minutes.  The most recent 96 records can be retrieved by using a record number specifier in the tag as follows:
+
+Examples of accessing historical data:
+
+WXTAG_ODU_TEMP#4       returns the 4th newest record, which is (generally) 1 hour old
+WXTAG_ODU_TEMP_C#MIN   returns the min recorded outdoor temp in celcius
+                        This is the min since startup, not just in last 24 hours.
+WXTAG_ODU_TEMP_C#MAX   returns the max recorded outdoor temp in celcius
+WXTAG_ODU_TEMP#1:95:3  returns a comma separated list of every 4th outdoor temp record
+                        from record 1 to record 95 (1, 4, 7, 10, ...)
+WXTAG_ODU_TEMP#95:1:2  returns a comma separated list of outdoor temps from record 95 
+                        down to record 1, skipping ever other one. THIS FORMAT IS GOOD
+                        FOR GRAPHING PACKAGE - You get a sample every 30 minutes starting 
+                        with the oldest data up to the newest.
+WXTAG_ODU_TEMP#95:1:2- same as above, but values are separated in list with - instead of comma
+
+The general format above works with nearly all of the tags in the system.  Some tag types don't support MIN/MAX if it doesn't make sense, like wind bearing.
+
+Tags are also supported that insert the current time and date into the data stream.  There are several flavors of this shown by example below.  NOTE THAT THE WEATHER STATION ONLY SENDS THE DATE AND HOUR ONCE PER HOUR.  IF THE SERVER HAS BEEN RUNNING FOR LESS THAN 1 HOUR, THE DATE MAY NOT BE SET AND -- WILL BE RETURNED.
+
+Examples of formatting the current date and time:
+
+WXTAG_TSDATE     Date: ^WXTAG_TSDATE^
+WXTAG_TSTIME     Time: ^WXTAG_TSTIME^
+WXTAG_TSTIME_2 Time24: ^WXTAG_TSTIME_2^
+
+WXTAG_TSYEAR     Year: ^WXTAG_TSYEAR^
+WXTAG_TSMONTH   Month: ^WXTAG_TSMONTH^
+
+WXTAG_TSMONTHTEXT     Text Month:  ^WXTAG_TSMONTHTEXT^
+WXTAG_TSMONTHTEXT_3   Text Month3: ^WXTAG_TSMONTHTEXT_3^ (First 3 chars)
+WXTAG_TSMONTHTEXT_1   Text Month1: ^WXTAG_TSMONTHTEXT_1^
+
+WXTAG_TSDAY           Day: ^WXTAG_TSDAY^
+WXTAG_TSDAYOFWEEK     Day of week:  ^WXTAG_TSDAYOFWEEK^
+WXTAG_TSDAYOFWEEK_1   Day of week3: ^WXTAG_TSDAYOFWEEK_3^
+WXTAG_TSDAYOFWEEK_3   Day of week1: ^WXTAG_TSDAYOFWEEK_1^
+
+WXTAG_TSHOUR     Hour: ^WXTAG_TSHOUR^
+WXTAG_TSHOUR_2 Hour24: ^WXTAG_TSHOUR_2^
+WXTAG_TSAMPM    AM/PM: ^WXTAG_TSAMPM^
+WXTAG_TSMINUTE Minute: ^WXTAG_TSMINUTE^
+
+You can also get the timestamp when a particular piece of weather data was gathered.  This can be handy for knowing when the min and max occurred.  The example below uses the tags: WXTAG_ODU_TEMP#MIN followed by WXTAG_ODU_TEMP-TSDATE#MIN, then WXTAG_ODU_TEMP-TSTIME#MIN to get the min outdoor temp, and the date and time it was recorded.
+
+Min temp: ^WXTAG_ODU_TEMP#MIN^ - Occured On: ^WXTAG_ODU_TEMP-TSDATE#MIN^ ^WXTAG_ODU_TEMP-TSTIME#MIN^
+
+That's it for the basics of the supported tag options.  The rest of this file tries to enumerate all of the tags that are supported as well as their variants.
+
+------------------------------------------------------------------------------------------
+
+// Global Behavior Control Tag
+// d:use dashes 0:use 0   b:leave blank  Sxxx:any string var length
+Day: ^WXTAG_GLOBAL_NODATA_D^^WXTAG_TSDAY#96^ (_D Global) or ^WXTAG_GLOBAL_NODATA_0^^WXTAG_TSDAY#96^ (_0 Global) or ^WXTAG_GLOBAL_NODATA_B^^WXTAG_TSDAY#96^ (_B Global) or ^WXTAG_GLOBAL_NODATA_S(**No Data**)^^WXTAG_TSDAY#96^ (S option)
+^WXTAG_GLOBAL_NODATA_D^
+
+ ------------------- Wind Gauge Tags ----------------------------
+        Timestamp: ^WXTAG_WG_TSDATE^ ^WXTAG_WG_TSTIME^ Pkt Cnt: ^WXTAG_WG_TSPKTCNT^ ^WXTAG_WG_BATTERY^
+Wind Bearing: ^WXTAG_WG_BEARING^
+Wind Speed: ^WXTAG_WG_SPEED^ default ^WXTAG_WG_SPEED_S^ mph ^WXTAG_WG_SPEED_N^ km/hr ^WXTAG_WG_SPEED_N^ knots/hr ^WXTAG_WG_SPEED_M^ m/s
+Avg Speed:  ^WXTAG_WG_AVGSPEED^ default
+Wind Chill: ^WXTAG_WG_WINDCHILL^ or ^WXTAG_WG_WINDCHILL_C^ or ^WXTAG_WG_WINDCHILL_RF^ (F, raw)
+Chill Valid ^WXTAG_WG_CHILLVALID^
+
+ ------------------- Rain Gauge Tags ----------------------------
+        Timestamp: ^WXTAG_RG_TSDATE^ ^WXTAG_RG_TSTIME^ Pkt Cnt: ^WXTAG_RG_TSPKTCNT^ ^WXTAG_RG_BATTERY^
+Rain Rate:  ^WXTAG_RG_RAINRATE^
+Rain Total: ^WXTAG_RG_RAINTOTAL^
+            ^WXTAG_RG_RAINTOTAL_I^ (inches)
+            ^WXTAG_RG_RAINTOTAL_M^ (mm)
+Rain Yesterday: ^WXTAG_RG_RAINYESTERDAY^
+Rain Reset: ^WXTAG_RG_RAINRESET^
+     Month: ^WXTAG_RG_RRTSMONTH^ or ^WXTAG_RG_RRTSMONTHTEXT^ or ^WXTAG_RG_RRTSMONTHTEXT_3^ or ^WXTAG_RG_RRTSMONTHTEXT_1^
+       Day: ^WXTAG_RG_RRTSDAY^ or ^WXTAG_RG_RRTSDAYOFWEEK^ or ^WXTAG_RG_RRTSDAYOFWEEK_3^ or ^WXTAG_RG_RRTSDAYOFWEEK_1^
+
+ ------------------- Historical Rain Data Tags
+ Rain last day: ^WXTAG_RAINHIST_TOTALLASTDAY^
+ Rain last week: ^WXTAG_RAINHIST_TOTALLASTWEEK^
+ Rain last 3 days: ^WXTAG_RAINHIST_TOTALLAST3DAY^
+
+ Rain by day for last week: ^WXTAG_RAINHIST_TOTALLASTWEEKBYDAY^
+ 
+ ------------------- Extra Sensor Tags --------------------------
+Sensor1 
+        Timestamp: ^WXTAG_EXT1_TSDATE^ ^WXTAG_EXT1_TSTIME^ Pkt Cnt: ^WXTAG_EXT1_TSPKTCNT^ ^WXTAG_EXT1_BATTERY^
+      Temperature: ^WXTAG_EXT1_TEMP^ (F)
+                   ^WXTAG_EXT1_TEMP_C^ (C)
+         Humidity: ^WXTAG_EXT1_HUMIDITY^%
+         Dewpoint: ^WXTAG_EXT1_DEWPOINT^
+
+Sensor2 
+        Timestamp: ^WXTAG_EXT2_TSDATE^ ^WXTAG_EXT2_TSTIME^ Pkt Cnt: ^WXTAG_EXT2_TSPKTCNT^  ^WXTAG_EXT2_BATTERY^
+      Temperature: ^WXTAG_EXT2_TEMP^ (F)
+         Humidity: ^WXTAG_EXT2_HUMIDITY^%
+         Dewpoint: ^WXTAG_EXT2_DEWPOINT^
+
+ --------------- Outdoor Temperature Unit Tags ------------------
+        Timestamp: ^WXTAG_ODU_TSDATE^ ^WXTAG_ODU_TSTIME^ Pkt Cnt: ^WXTAG_ODU_TSPKTCNT^ ^WXTAG_ODU_BATTERY^
+Battery: ^WXTAG_ODU_BATTERY^ (default) or ^WXTAG_ODU_BATTERY_B^ (0/1) or ^WXTAG_ODU_BATTERY_S (**Battery Is Low**)^ (freeform text)
+
+Temperature: ^WXTAG_ODU_TEMP^
+   Humidity: ^WXTAG_ODU_HUMIDITY^%
+   Dewpoint: ^WXTAG_ODU_DEWPOINT^
+
+ ---------------- Indoor Temperature Unit Tags ------------------
+        Timestamp: ^WXTAG_IDU_TSDATE^ ^WXTAG_IDU_TSTIME^ Pkt Cnt: ^WXTAG_IDU_TSPKTCNT^ ^WXTAG_IDU_BATTERY^
+Temperature: ^WXTAG_IDU_TEMP^
+Humidity: ^WXTAG_IDU_HUMIDITY^%
+Dewpoint: ^WXTAG_IDU_DEWPOINT^ (default) ^WXTAG_IDU_DEWPOINT_CR^ (C, no LL.L) ^WXTAG_IDU_DEWPOINT_FR^ (F, no LL.L) ^WXTAG_IDU_DEWPOINT_R^ Raw - no LL.L
+Pressure: ^WXTAG_IDU_PRESSURE^ default (mbar) ^WXTAG_IDU_PRESSURE_I^ inches ^WXTAG_IDU_PRESSURE_M^ mm/h ^WXTAG_IDU_PRESSURE_H^ h/Pa ^WXTAG_IDU_PRESSURE_B^ mb
+Forecast: ^WXTAG_IDU_FORECAST^
+Sea Level Offset: ^WXTAG_IDU_SEALEVELOFFSET^ ^WXTAG_GLOBAL_MULTISPACER_,^
+
+Historical Outdoor Temp: ^WXTAG_GLOBAL_NODATA_0^{^WXTAG_ODU_TEMP#96:1:4^}^WXTAG_GLOBAL_NODATA_D^
+                          Min temp: ^WXTAG_ODU_TEMP#MIN^ - Occured On: ^WXTAG_ODU_TEMP-TSDATE#MIN^ ^WXTAG_ODU_TEMP-TSTIME#MIN^
+                          Max temp: ^WXTAG_ODU_TEMP#MAX^ - Occured On: ^WXTAG_ODU_TEMP-TSDATE#MAX^ ^WXTAG_ODU_TEMP-TSTIME#MAX^
+
+Historical Indoor Temp: ^WXTAG_GLOBAL_NODATA_0^{^WXTAG_IDU_TEMP#96:1:4^}^WXTAG_GLOBAL_NODATA_D^
+                          Min temp of ^WXTAG_IDU_TEMP#MIN^ Occured On ^WXTAG_IDU_TEMP-TSDATE#MIN^ ^WXTAG_IDU_TEMP-TSTIME#MIN^
+                          Max temp of ^WXTAG_IDU_TEMP#MAX^ Occured On ^WXTAG_IDU_TEMP-TSDATE#MAX^ ^WXTAG_IDU_TEMP-TSTIME#MAX^
+
+ --------- Current Date and Time and pkt counter Tags -----------
+Date:   ^WXTAG_TSDATE^
+Time:   ^WXTAG_TSTIME^ or ^WXTAG_TSTIME_2^ (time 24)
+
+ Year: ^WXTAG_TSYEAR^
+Month: ^WXTAG_TSMONTH^ or ^WXTAG_TSMONTHTEXT^ or ^WXTAG_TSMONTHTEXT_3^ or ^WXTAG_TSMONTHTEXT_1^
+  Day: ^WXTAG_TSDAY^ or ^WXTAG_TSDAYOFWEEK^ or ^WXTAG_TSDAYOFWEEK_3^ or ^WXTAG_TSDAYOFWEEK_1^
+
+Hour:   ^WXTAG_TSHOUR^ or ^WXTAG_TSHOUR_2^ (24 hours)
+AM/PM:  ^WXTAG_TSAMPM^
+Minute: ^WXTAG_TSMINUTE^
+
+Bad Pkt Cnt: ^WXTAG_BADPKTCNT^    Packet Count: ^WXTAG_TSPKTCNT^
+Resyncs:     ^WXTAG_RESYNCCNT^     Clock Ticks: ^WXTAG_TICK^
+Unsupported: ^WXTAG_UNSUPPORTEDPKTCNT^
+

@@ -1,0 +1,78 @@
+Netgear WNR3500L v1 Setup 
+
+IMPORTANT NOTE - RTL-SDR DIDN'T WORK IN THIS SETUP.  Program runs 
+but doesn't find any usb devices.  Suspect problem with kernel drivers
+or libusb-1.0. Attempted to recompile libusb-1.0 from source but got
+same result with versions 08, 09, and 17.
+
+Use WNR3500L DD-WRT web interface to configure basic settings including 
+
+1) Prepare a usb thumb drive to use for /opt and /jffs automounts
+
+Create three partitions (assumes 1GB flash size)
+
+Partition 1 - Type: ext2  Label: Opt   Size: 600MB
+Partition 2 - Type: ext2  Label: Jffs  Size: 250MB
+Partition 1 - Type: ext2  Label: Swap  Size: 191MB (remainder)
+
+(Note that labels must be exactly as shown for automounting to work)
+
+
+2)  Install DD-WRT Kong build that fits within 8MB device flash
+
+With factory firmware, need to install .chk tail image first before you
+can install the .bin kong build (google for instructions)
+
+Working image as of 07/08/2014:
+ http://www.desipro.de/ddwrt/K26/r22000++/
+      usb-ftp-samba3-vpn-nv32k-broadcom.bin
+
+3) Configure basic router settings including enabling USB, and SSHd
+
+4) Create a samba share to transfer files to router
+
+5) SSH to router
+
+a) Install libusb-1.0
+
+opkg update
+opkg install libusb-1.0
+
+b) Install lighttpd
+opkg install lighttpd
+opkg install lighttpd-mod-cgi
+
+edit /opt/etc/lighttpd/lighttpd.conf
+(These will be in the file already but need to be uncommented and/or edited)
+- Uncomment mod_cgi in servicer modules section
+- set: server.document-root = "/opt/rtl-wx/www"
+- set: index-file.names = ( "index.cgi" )
+- set: server.port = 81 (MUST NOT BE SAME PORT AS DD-WRT WEB INTERFACE)
+- set: cgi.assign = ( ".cgi" => "" )
+
+--------------------------------------------------------------------------
+Instructions for getting WNR3500L compatible toolchain for cross compiling
+
+get dd-wrt toolchain file (giant 1.5+ gig file with many toolchains)
+extract toolchain-mipsel_gcc4.1.2 to ububtu/home
+
+2) Build binaries of the usb-1.0 library for linking only (these aren't used on the R7000)
+
+I tried to use the  usb-1.0 library from the R7000 (downloaded with opkg) but the linker complained
+about the library not having any symbols, so I found the usb-1.0 sources and rebuilt them using the
+cross-tools so the link would succeed.
+
+cd /tmp
+wget http://downloads.sourceforge.net/project/libusb/libusb-1.0/libusb-1.0.9/libusb-1.0.9.tar.bz2
+tar -xf libusb-1.0.9.tar.bz2
+cd libusb-1.0.9
+export TOOLCHAIN=/home/ubuntu/toolchain-mipsel_gcc4.1.2
+export PATH="$TOOLCHAIN/bin/:$PATH"
+./configure --prefix=/ --host=mipsel-linux
+make
+sudo make DESTDIR=$TOOLCHAIN install
+
+
+
+
+

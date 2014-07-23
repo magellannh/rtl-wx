@@ -1,0 +1,1 @@
+If building from sources, get the latest librtlsdr from github and expand it here.  toolchain.cmake is needed for DD-WRT builds, but not for Raspberry Pi builds.  See platform specific instructions for more details.

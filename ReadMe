@@ -1,0 +1,33 @@
+RTL-Wx collects Oregon Scientific 433Mhz wireless weather sensor data using a low cost USB RTL-SDR dongle.  The project is ready to run with a compatible Raspberry Pi or Netgear R7000 setup. 
+
+To install the software, please see the appropriate hardware specific instructions in rtl-wx/doc. 
+
+Tested Hardware setups
+1) Raspberry Pi
+- CanaKit Raspberry Pi Kit (Model B512 MB v2 + Premium Black Case + 1amp Micro USB Power Supply) 
+- 4GB Class 10 SD card with Raspbian GNU/Linux 7, wheezy installed.
+- NooElec NESDR Mini USB RTL-SDR & ADS-B Receiver Set, RTL2832U & R820T Tuner
+- Oregon Scientific 433Mhz weather sensors (several v2.1 & v3 models tested)
+- Gigaware 720p HD Desktop Web Cam (from eBay)
+
+2) Netgear R7000 w/DD-WRT
+- Netgear R7000 running DD-WRT v24-sp2 (06/06/14) kongax build (SVN revision 24200M).
+- 1GB USB flash drive in front (usb 3.0) port with /Opt /Jffs and /Swap partitions automounted
+- NooElec NESDR Mini USB RTL-SDR & ADS-B Receiver Set, RTL2832U & R820T Tuner
+- Oregon Scientific 433Mhz weather sensors (several v2.1 & v3 models tested)
+- NOTE: Webcam and FTP functionality not supported/tested on R7000
+
+Tested with these Oregon Scientific 433Mhz sensors
+  - OS protocol v2.1 - THGR968, BTHR968, THGR268, RGR968
+  - OS protocol v3   - THGR810
+  
+Multiple OS sensor models use the same sensor ids and message format, so some sensors not listed here may also work.  For example the THGR122N and THGN123N seem to use the same sensor id and layout as the THGR268 (id 0x1d20). The code almost supports the WMR968 wind gauge, but since mine is broken, more work is needed.  To add support for new sensors, change code in appropriate low level Oregon Scientific v2.1 and v3 protocol parsing routine in src/rtl-433.c and in message decode logic in src/rtl-wx.c.
+
+If you don't need to make source changes, you can use the pre-built binaries in rtl-wx/bin/<platform name>. Again, see the platform specific install instructions for details.
+
+Installation steps for other platforms depend on whether the platform has a native C compiler installed, or whether it requires a cross compilation environment.  The DD-WRT instructions offer an example for cross compiled environments, while the Raspberry Pi instructions offer an example of a native compile enviroment.
+
+Building from source requires source code from the librtlsdr project, which should be placed in rtl-wx/src/librtlsdr.  See http://sdr.osmocom.org/trac/wiki/rtl-sdr and get code from: https://github.com/steve-m/librtlsdr/releases (Tested with v0.5.3 from Feb 6, 2014).  The target specific instructions list the target specific steps needed to build librtlsdr.  The rtl-wx Makefile links librtlsdr as a static library, so this library must be built before rtl-wx can be build.
+
+
+

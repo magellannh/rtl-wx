@@ -1,0 +1,190 @@
+--------------------------------------------------------------------------------
+RTL-Wx User Guide
+--------------------------------------------------------------------------------
+
+RTL-Wx collects and manages Oregon Scientific 433Mhz wireless weather sensor data using a USB RTL-SDR dongle.  The program is ready to run with a compatible Raspberry Pi or Netgear R7000 setup. 
+
+This guide provides an overview of how to configure and use the RTL-Wx software once it has been installed on the target hardware.  To install the software, please see the appropriate hardware specific install instructions.
+
+Raspberry Pi Hardware Setup (your mileage may vary)
+- CanaKit Raspberry Pi Kit (Model B512 MB v2 + Premium Black Case + 1amp Micro USB Power Supply) 
+- 4GB Class 10 SDcard with Raspbian GNU/Linux 7, wheezy installed.
+- NooElec NESDR Mini USB RTL-SDR & ADS-B Receiver Set, RTL2832U & R820T Tuner
+- Oregon Scientific 433Mhz weather sensors (v2.1 - THGR968, BTHR968, THGR268, RGR968,  v3 - THGR810)
+- Gigaware 720p HD Desktop Web Cam (from eBay)
+
+Netgear R7000 hardware setup
+- Netgear R7000 running DD-WRT v24-sp2 (06/06/14) kongax build (SVN revision 24200M).
+- 1GB USB flash drive in front (usb 3.0) port with /Opt /Jffs and /Swap partitions automounted
+- NooElec NESDR Mini USB RTL-SDR & ADS-B Receiver Set, RTL2832U & R820T Tuner
+- Oregon Scientific 433Mhz weather sensors (v2.1 - THGR968, BTHR968, THGR268, RGR968,  v3 - THGR810) 
+- NOTE: Webcam and FTP functionality not supported/tested on R7000
+
+Note:   Multiple Oregon Scientific sensor models use the same sensor ids, so some sensors not listed here may also work.  For example the THGR122N and THGN123N use the same sensor id and layout as the THGR268 (id 0x1d20). To add support for new sensors, change the Oregon Scientific v2.1 and v3 parsing routines in build/rtl_433/src/rtl_433.c and in src/SlugWx.c.
+
+
+Software Features
+-----------------
+
+- Gather 433Mhz weather sensor data without a PC or weather station
+- Periodically save webcam snapshots (Raspberry Pi only)
+- Access weather data and webcam snapshots through onboard web interface
+- FTP weather and webcam data to a remote web site at regular intervals (Raspberry Pi only)
+- Create custom web pages that can access weather data as well as max/min data and 24 hours of stored historical data.
+
+
+Overview of Software
+--------------------
+
+The RTL-Wx software is intended to operate primarily as a daemon without any direct user interaction.  Once it is started, the software collects data from 433Mhz weather sensors and periodically processes template files by replacing predefined "tags" with wirelessly received sensor data.  
+
+The processed files (usually in html format) can be accessed using the embedded web server and on Raspberry Pi can be periodically uploaded to a remote web server using FTP.  "Tags" have been defined to provide access to weather sensor data. 
+
+Finally, on Raspberry Pi, the software has the ability to periodically save a webcam snapshot and either serve the image using the embedded web server, or upload it to a remote web site using FTP.
+
+
+Files and folders
+-----------------
+
+FOLDER: rtl-wx/bin
+
+This has RTL-Wx binaries for Raspberry Pi and R7000. Before using, copy or
+link the appropriate binary from rtl-wx/bin/<target name> folder to rtl-wx/bin and
+make sure execute permissions are set.  Also, copy the appropriate header.htm
+ to rtl-wx/www/misc.  This file has build information displayed by the web interface.
+
+Invoke the program  from rtl-wx/bin as follows: (usually done as part of system startup) 
+
+	rtl-wx -w <working directory - path to www folder>
+	example: rtl-wx -w ../www
+        (see programming/debugging documentation for other startup options) 
+
+	To debug wireless sensor data reception, try 
+	rtl-433 -f 433810000 -l 7000  or 
+	rtl-433 -h
+
+
+FOLDER: rtl-wx/src (see advanced users guide for more information
+
+FOLDER: rtl-wx/www
+      
+This folder contains files used by the embedded web server as well as log, config and output files
+
+The following pairs of files implement the 4 main tabs available on the embedded web server:
+- index.cgi & misc/index.htm
+- deviceinfo.cgi & misc/deviceinfo.htm
+- logfile.cgi & misc/logfile.htm
+- scheduler.cgi & misc/scheduler.htm
+
+Note that the cgi scripts won't run if you don't set the correct permissions on them and if web server user (on raspberry pi) doesn't have read and execute access (see install instructions for details).
+
+
+Other files in the www folder
+-----------------------------
+
+- rtl-wx.conf
+
+This file allows you to configure the software.  You can list the names of files that have tags that you want replaced with weather data periodically.  Also you can specify FTP server configuration information.  You can also specify the frequency at which to perform scheduled operations (like replacing tags in file, uploading, or taking data snapshots).  This file is fairly self-documented, so the best way to learn about the config options is to look at this file.
+
+- webcam.jpg
+
+If you're using a webcam, the webcam snapshots generated periodically by rtl-wx will be stored here.  The file can be incorporated in custom web pages, uploaded using FTP, or viewed using the embedded web server.  If you don't have a webcam installed, make sure webcam snapshot frequency is 0 in rtl-wx.conf.
+
+- rtl-wx.log
+
+This file is a log file of messages output from the program.  In order to clear this log, it's best to use the web interface (described below). Removing this file manually from the command line with rtl-wx running will cause errors.
+
+- rtl-wx.htx (and .htm)
+
+This template tag file is periodically processed by rtl-wx into the output file rtl-wx.htm.  This is the base file of a sample weather display web page.   You can customize this file based on your own weather station setup and the information you'd like to display.  
+
+- graph.js
+
+This file is a javascript graphing routine that's used by the example web site pages produce graphs using historical weather data.
+
+
+
+
+----------------------------------------------------------------------------------------
+				Using the Embedded rtl-wx Web interface
+----------------------------------------------------------------------------------------
+
+Once you have the software installed, configured, and running, you should be able to access the  web interface.
+
+WARNING: The web interface uses CGI bin scripts to communicate with the running rtl-wx program.  Because the program utilizes something called unix named pipes for this communication, the web interface cannot support more than 1 simulataneous user.  
+
+THE STATUS AND DEBUGGING PAGES ON THE WEB INTERFACE ARE PRIMARILY INTENDED FOR SETUP, DEBUG, AND STATUS CHECKING AND NOT ROUTINE ACCESS BY MULTIPLE USERS.  
+
+The above warning does not apply to viewing web pages that don't use cgi scripts, such as rtl-wx.htm
+ 
+
+To access the embedded Web interface, use:
+--------------------------------------
+ 
+	http://192.168.1.14 or
+	http://192.168.1.14:81 (for R7000) 
+	(substitute the IP here with the IP of your device)
+
+
+Many of the menu choices in the Web inteface  result in commands being sent to the rtl-wx server program to fetch some data or cause some action.  Below is a list of some of the commands:
+
+
+Show Current Data
+-----------------
+
+This command gives you a quick dump of the current weather data.  If rtl-wx  has only been up for a short time, some of the sensors may not have reported data yet and they are not shown.  
+
+Show Log File
+-------------
+
+This command displays the contents of the log file.  The code is designed to not write to the log file unless something unusual happens, so it wouldn't be uncommon for the log file to only have the startup message in it.  Generally, only errors and user commands send to the server from the web interface are logged.
+
+Clear Log File
+--------------
+
+Clears the log file and puts a single message in with the date the file was cleared.  This is the only method you should use to clear the log file while the server is running.  Deleting or modifying the log file manually (using telnet or ssh) is likely to result in errors.
+
+Reset Max/Min Data
+------------------
+
+This command will reset all the max/min data.  Max/Min values are retained for as long as the server stays running (unlike other historical data that "ages" out every 24 hours).
+
+Save Data Snapshot
+------------------
+
+Force a save of the current data as a historical weather data record.  This historical data can be accessed through the tags described earlier.  Be aware that the custom web page graphs use the historical data and assume that it is snapped every 15 minutes.  If you force the server to save manual snapshots, the time base used by the web graphing will be inaccurate.  Anything you do here to mess things up should age out within 24 hours and shouldn't require the server to be restarted however.
+
+Reload rtl-wx.conf
+------------------
+
+Reload the configuration file to pick up any changes.  By default, this file is reread every 15 minutes automatically, however you can use this command to get instant results
+
+Process Tag Files
+-----------------
+
+Process the tag files that have been specified in the configuration file (as of the last config file read - see above).  If you are debugging a new template file, this command can be handy so you don't need to wait for the server to get around to processing the files.  (If you changed the config file, don't forget to issue the reload command to the server first).
+
+Force FTP Upload (raspberry pi only)
+----------------
+
+Force an FTP upload.  The configuration file is not reread when this command is processed, so if you need it to be reread, you need to issue a reload command first.  No status is given, but you can use the "show log" command to check for errors after the upload has completed.
+
+Show Sensor Info
+----------------
+
+This command dumps a bunch of sensor status info including lock codes, a count of lock code mismatches, and other info.  If you need to enabled locking sensors based on their rolling code, you can use the Sensor Info page to reset the codes when you replace your sensor battery.
+
+Custom Web
+----------
+
+This command doesn't communicate with the rtl-wx server, but it displays the rtl-wx.htm file. It doesn't depend on an FTP upload occuring since the default web page is served locally by the embedded web server.  To test out FTP uploads, you need to enter the URL of your remote web site directly into your browser.
+
+--------------------------------------------------------------------------------
+Creating a custom web page
+--------------------------------------------------------------------------------
+
+You can customize the pre-build web page templates found on the rtl-wx distribution.  In order to do this, you'll need to understand the syntax used by rtl-wx for "tag file processing".  The best way to learn about the parser tags that the server "understands" and can substitute with weather station data is to look at the rtl-wx.htx file (in www).
+
+If you create any additional template files that need to have tags processed, or if you have additional files that you want to upload, you will want to update the rtl-wx.conf file.  Also, after you make changes to this file, it's a good idea to force the server to reread the conf file by issuing a config file reload command using the web interface.
+
+

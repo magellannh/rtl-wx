@@ -1,0 +1,52 @@
+RTL-Wx Weather sensor monitoring software
+
+Version Info and Release
+
+07-23-2014 - Restructured to support DD-WRT
+  - Renamed program from SlugWx (PiWx) to RTL-Wx and renamed several support files (eg SlugWx.conf to rtl-wx-conf)
+  - Reorganized public folder layout (changed public to www, merged thttp into www)
+  - Merged make for main rtl-wx program and for rtl-433 debug program into single Makefile (two targets)
+  - Separated embedded librtlsdr files and updated sources from git rtlsdr repo.  This now is built as library in rtl-wx/librtlsdr
+  - Fixed bug in sensor naming code (from 07/03) that caused memory corruption (accidental semicolon after for loop)
+  - Eliminated legacy wmr9x8 serial port weather station support (now only suports 433mhz USB rtlsdr)
+  - Updated Documentation to prepare for release
+
+07-03-2014 - Added ability to name sensors for debug info display (see rtl-wx.conf)
+06-28-2014 - Fixed error in SlugWx.htx that caused duplicate sample in graph displays (param 28? duplicated)
+ 
+05-21-2014 - Added support for Raspberry Pi
+  - Replaced pwc/vidcat calls with fswebcam call
+  - Added rtl_433 library to read receive data using 433Mhz USB-RTL dongle instead of connected weather station.
+  
+----------------------------------------------------------------------------------
+Notes  (From NSLU2 incarnation of program which connected serially to a wmr968 weather station)
+
+SlugWx Weather station monitoring software for the NSLU2
+
+07-11-2011 - Swapped out FtpLib and replaced it with ncFtpPut system call
+
+After persistant hangs in the ftplib ftpConnect() call, I swapped it out and instead am now using
+ncFtpPut through a system() call.  It's a tad slower since it does a separate connect/login for each
+uploaded file, but it seems to work fine.  
+
+This change is in scheduler.c and also SlugWx.conf.  The SlugWx.conf change was to remove the filename
+from the dest path, as the src filename is assumed by ncftpput.  Also, had to do a one time command line
+"ipkg install ncftp" to get the ncftp package installed on the Slug.
+
+Also, I commented out a "resetting serial port" printf in scheduler.c.  In the past I've had
+problems writing to stdout while in standalone mode (the normal auto-start mode) where the stdout buffer
+gets full since there's no stdout open and the code hangs after too many printf calls.
+
+----------------------------------------------------------------------------------
+06-04-2010 - Added cumulative rainfall logic to support rainfall per day and per week in web output
+
+The cumulative rainfall logic allows the program to report total rainfall for each day of the past week.
+
+This change required some updates to nearly every file in the project except Util.c and Wm9x8.x
+
+----------------------------------------------------------------------------------
+02-25-2009 - Changed DPRINTF to remove write to stdout which was causing output buffer to fill
+and subsequent writes to hang app.
+
+
+

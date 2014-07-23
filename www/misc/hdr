@@ -1,0 +1,5 @@
+#!/bin/bash
+BUILD_DATE_STRING=`date +"%m-%d-%Y"`
+BUILD_TOOL_CHAIN=arm-openwrt-linux
+TARGET_PLATFORM_STRING="Netgear R7000"
+sed -e "s/INSERT_BUILD_STRING/built on $BUILD_DATE_STRING with $BUILD_TOOL_CHAIN/g" -e "s/INSERT_TARGET_STRING/for $TARGET_PLATFORM_STRING/g" header.in > header.htm

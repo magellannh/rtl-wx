@@ -1,0 +1,63 @@
+Setup rtl-wx on Netgear R7000 running DD-WRT
+--------------------------------------------
+
+Requirements:
+
+- Free USB port and compatible usb rtl-sdr device
+- One or more supported Oregon Scientific 433mhz weather sensors
+   eg THGR810, THGR122N, RGR968, BTHR968, THGR968
+- SSH access to router
+- writable /jffs and /opt (either with mounted USB drive or JFFS2)
+  (rtl-wx package needs less than 10MB total disk space)
+- ipkg and opkg working (needed to get libusb-1.0)
+- Cross development toolchain on linux computer (for routers other than R7000)
+
+Test Setup: 
+- Netgear R7000 running DD-WRT v24-sp2 (06/06/14) kongac 
+- NooElec USB-RTL-SDR dongle in rear usb port (usb 2.0)
+- Sandisk 1GB usb thumb drive in front usb port (mounted to /opt and /jffs)
+
+Note: For some reason, the blue light on the rtl-sdr dongle doesn't illuminate
+      when plugged into the R7000, but otherwise it seems to work fine.
+
+
+1) Install libusb-1.0 using: opkg install libusb-1.0
+
+2) Copy rtl-wx folder to /opt on target plaform
+   - For DD-WRT hardware other than Netgear R7000, you'll probably need
+     to cross compile sources (see cross compile instructions).  The R7000
+     binaries may work on Netgear R6xxx hardware.
+
+3) Enable lighttpd web server
+   - Use R7000 web interface to enable lighttpd
+   - copy /tmp/lighttpd.conf to /jffs/etc
+   - Edit lighttpd.conf as follows: (see example lighttpd.conf in this folder)
+	edit server.dir-listing  "disable"
+	edit server.indexfiles line to include only "index.cgi"
+	add following line:  cgi.assign = ( ".cgi" => "" )
+	edit server.document-root  = "/opt/rtl-wx/www" (or make link at /jffs/www)
+	remove: server.bind = "192.168.x.x" (*optional)
+	remove: "fast-cgi", from services (to save memory)
+   - Restart lighttpd
+	ps | grep lighttpd 
+	kill proc#
+	cd /jffs/etc
+	lighttpd -f lighttpd.conf
+
+4) Test program from command line in standalone mode
+	cd /opt/rtl-wx/bin
+	./rtl-wx -s
+        (hit space bar for dump of weather data)
+
+	alternatively, run ./rtl-433 for raw output from the USB_SDR dongle and for debugging
+
+5) Review program documentation to customize
+
+   Review rtl-wx/www/rtl-wx.conf and make changes as needed
+   Edit rtl-wx/www/rtl-wx.htx 
+
+6) Use R7000 web interface to add startup command: 
+
+   /opt/rtl-wx/bin/rtl-wx -w /opt/rtl-wx/www &
+
+
