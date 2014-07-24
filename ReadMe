@@ -2,7 +2,12 @@ RTL-Wx collects Oregon Scientific 433Mhz wireless weather sensor data using a lo
 
 To install the software, please see the appropriate hardware specific instructions in rtl-wx/doc. 
 
-The code leverages code from the rtl_433 project (https://github.com/merbanan/rtl_433) and depends on libusb-1.0 (http://libusb.info/) and librtlsdr (https://github.com/steve-m/librtlsdr/releases).
+This project includes some code from the rtl_433 project (from rtl_433.c with heavy mods):
+ - https://github.com/merbanan/rtl_433
+   
+It depends on the following projects:
+ - libusb-1.0 (http://libusb.info/) is linked as a shared dynamic library
+ - librtlsdr (https://github.com/steve-m/librtlsdr/releases) is linked as a static library
 
 Tested Hardware setups
 1) Raspberry Pi
