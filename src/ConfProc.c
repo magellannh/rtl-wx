@@ -1,13 +1,24 @@
 
 /*========================================================================
 
-	ConfProc.c
-	
-	This module contains routines to  update the weather monitoring
+   ConfProc.c
+   
+   This module contains routines to  update the weather monitoring
      software configuration settings by reading a configuration file
 
-    For an example of the settings and options that are supported, see the
+   For an example of the settings and options that are supported, see the
    file rtl-wx.conf
+   
+   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS
+   OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+   AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT HOLDERS
+   OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+   CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+   ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+   OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF OR INABILITY TO USE THIS SOFTWARE, EVEN IF
+   THE COPYRIGHT HOLDERS OR CONTRIBUTORS ARE AWARE OF THE POSSIBILITY OF SUCH DAMAGE.
+
 =========================================================================*/
 
 #include <string.h>
@@ -35,38 +46,38 @@ static int processMailMsgConfig(char *buf, WX_ConfigSettings *cVarp);
 
 int WX_processConfigSettingsFile(char *inFname, WX_ConfigSettings *cVarp)
 {
-  FILE *infd;
-  char rdBuf[READ_BUFSIZE];
+ FILE *infd;
+ char rdBuf[READ_BUFSIZE];
 
-  // These settings are reset before each read of the configuration file.
-  cVarp->tagFileParseFrequency=15; // 15 minutes
-  cVarp->configFileReadFrequency=5;
-  cVarp->dataSnapshotFrequency=15;
-  cVarp->rainDataSnapshotFrequency=60;
+ // These settings are reset before each read of the configuration file.
+ cVarp->tagFileParseFrequency=15; // 15 minutes
+ cVarp->configFileReadFrequency=5;
+ cVarp->dataSnapshotFrequency=15;
+ cVarp->rainDataSnapshotFrequency=60;
 
-  cVarp->webcamSnapshotFrequency=0;
+ cVarp->webcamSnapshotFrequency=0;
 
-  cVarp->NumTagFilesToParse=0;
-  cVarp->ftpUploadFrequency=15;
-  cVarp->ftpServerHostname[0]=0;
-  cVarp->ftpServerUsername[0]=0;
-  cVarp->ftpServerPassword[0]=0;
-  cVarp->numFilesToFtp = 0;
-  cVarp->mailServerHostname[0]=0;
-  cVarp->mailServerUsername[0]=0;
-  cVarp->mailServerPassword[0]=0;
-  cVarp->numMailMsgsToSend = 0; 
-  cVarp->mailSendFrequency = 0; 
+ cVarp->NumTagFilesToParse=0;
+ cVarp->ftpUploadFrequency=15;
+ cVarp->ftpServerHostname[0]=0;
+ cVarp->ftpServerUsername[0]=0;
+ cVarp->ftpServerPassword[0]=0;
+ cVarp->numFilesToFtp = 0;
+ cVarp->mailServerHostname[0]=0;
+ cVarp->mailServerUsername[0]=0;
+ cVarp->mailServerPassword[0]=0;
+ cVarp->numMailMsgsToSend = 0; 
+ cVarp->mailSendFrequency = 0; 
 
-  cVarp->iduNameString[0]=0;
-  cVarp->oduNameString[0]=0;
-  { 
-    int i; for (i=0;i<=MAX_SENSOR_CHANNEL_INDEX;i++) cVarp->extNameStrings[i][0]=0; 
-  }
+ cVarp->iduNameString[0]=0;
+ cVarp->oduNameString[0]=0;
+ { 
+   int i; for (i=0;i<=MAX_SENSOR_CHANNEL_INDEX;i++) cVarp->extNameStrings[i][0]=0; 
+ }
   
  if ((infd = fopen(inFname, "r")) == NULL) {
-   DPRINTF("Config Processor was unable to open %s for reading.\n",inFname);
-   return(1);
+  DPRINTF("Config Processor was unable to open %s for reading.\n",inFname);
+  return(1);
  }
 
  // Read each line in the file and process the tags on that line.
@@ -190,8 +201,8 @@ int processftpFilename(char *buf, WX_ConfigSettings *cVarp)
    }
    else
     retVal=0;
-   }
-   return(retVal);
+  }
+  return(retVal);
 }
 int processTagProcFilename(char *buf, WX_ConfigSettings *cVarp) 
 {
@@ -227,8 +238,8 @@ int processTagProcFilename(char *buf, WX_ConfigSettings *cVarp)
    }
    else
     retVal=0;
-   }
-   return(retVal);
+  }
+  return(retVal);
 }
 static int extractQuotedString(char *buf, int *iptr, char *destString)
 {
@@ -267,7 +278,6 @@ int processMailMsgConfig(char *buf, WX_ConfigSettings *cVarp)
    if (extractQuotedString(buf, &i, subject) ==0) {}
    else if (extractQuotedString(buf, &i, recipients) ==0) {}
    else {
-
     // Extract filename (which isn't in quotes)
     while (((buf[i] == ' ') || (buf[i] =='\t')) && (i<READ_BUFSIZE))
        i++;
@@ -276,13 +286,11 @@ int processMailMsgConfig(char *buf, WX_ConfigSettings *cVarp)
       bodyFilename[j++] = buf[i++];
     bodyFilename[j]=0;
    }
-
    if ((recipients[0] != 0) && (subject[0] != 0) && (bodyFilename[0] != 0)) {
     cVarp->numMailMsgsToSend++;
     retVal = 1;
-    }
-   else
+   } else
     retVal=0;
-   }
-   return(retVal);
+  }
+  return(retVal);
 }

@@ -1,19 +1,29 @@
 
 /*========================================================================
 
-	Scheduler.c
-	
-	This module controls launching of time based actions such as ftp upload,
-      tag file processing, conf file re-reading, and email sending.  All of these function happen
-      based on a timer or trigger so the action handler should be called frequenty (at least
-      once a minute or so) in order to make sure these actions get done when they're supposed to.
+   Scheduler.c
+   
+   This module controls launching of time based actions such as ftp upload,
+   tag file processing, conf file re-reading, and email sending.  All of these function happen
+   based on a timer or trigger so the action handler should be called frequenty (at least
+   once a minute or so) in order to make sure these actions get done when they're supposed to.
 
-      The scheduler makes use of the system time() function in order to detemrine when
-      enough time has elapsed based on the configuration.
+   The scheduler makes use of the system time() function in order to detemrine when
+   enough time has elapsed based on the configuration.
 
-      Finally, there's some magic in these routines to attempt to align the timing so periodic processing happens at
-      even multiples of the frequency (ie. events occurring every 15 mins happen at xx:00, xx:15, xx:30, xx:45.  
-      The logic for this is a bit squirrely but it seems to work ok.
+   Finally, there's some magic in these routines to attempt to align the timing so periodic processing happens at
+   even multiples of the frequency (ie. events occurring every 15 mins happen at xx:00, xx:15, xx:30, xx:45.  
+   The logic for this is a bit squirrely but it seems to work ok.
+      
+   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS
+   OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+   AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT HOLDERS
+   OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+   CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+   ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+   OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF OR INABILITY TO USE THIS SOFTWARE, EVEN IF
+   THE COPYRIGHT HOLDERS OR CONTRIBUTORS ARE AWARE OF THE POSSIBILITY OF SUCH DAMAGE.
       
 ========================================================================*/
 
@@ -89,52 +99,49 @@ void WX_DoScheduledActions()
   
   // First reread configuration file if more than xx minutes has elapsed since last read
   if (getMinutesToWait(configVarp->configFileReadFrequency, time(NULL), lastConfProcTime) == 0) {
-//DPRINTF("Reading rtl-wx.conf at %s", asctime(localtime(&lastConfProcTime)));
+    //DPRINTF("Reading rtl-wx.conf at %s", asctime(localtime(&lastConfProcTime)));
     WX_DoConfigFileRead();
   }
 
   // Next save off data snapshot if it's time 
   if (getMinutesToWait(configVarp->dataSnapshotFrequency, time(NULL), lastDataSnapshotTime) == 0) {
-//DPRINTF(" Saving snapshot at %s", asctime(localtime(&lastDataSnapshotTime)));
-//printf("saving data snapshot...");fflush(stdout);
+    //DPRINTF(" Saving snapshot at %s", asctime(localtime(&lastDataSnapshotTime)));
+    //printf("saving data snapshot...");fflush(stdout);
     WX_DoDataSnapshotSave();
-//printf("done.\n");fflush(stdout);
-
+    //printf("done.\n");fflush(stdout);
   }
 
-    // Next save off rain data snapshot if it's time 
+  // Next save off rain data snapshot if it's time 
   if (getMinutesToWait(configVarp->rainDataSnapshotFrequency, time(NULL), lastRainDataSnapshotTime) == 0) {
-//DPRINTF(" Saving rain data snapshot at %s", asctime(localtime(&lastRainDataSnapshotTime)));
-//printf("saving rain data snapshot...");fflush(stdout);
+    //DPRINTF(" Saving rain data snapshot at %s", asctime(localtime(&lastRainDataSnapshotTime)));
+    //printf("saving rain data snapshot...");fflush(stdout);
     WX_DoRainDataSnapshotSave();
-//printf("done.\n");fflush(stdout);
+    //printf("done.\n");fflush(stdout);
   }
   
   // Next process tag files that need to be processed - Note that if timer is up, but we saved a data snapshot (and zeroed records) within 
   //1 minute we need to wait so there's enough time for new data to make it in.
   if (getMinutesToWait(configVarp->tagFileParseFrequency, time(NULL), lastTagProcTime) == 0) {
-//DPRINTF("Parsing Tagfiles at %s", asctime(localtime(&lastTagProcTime)));
-//printf("processing tagfiles...");fflush(stdout);
+     //DPRINTF("Parsing Tagfiles at %s", asctime(localtime(&lastTagProcTime)));
+     //printf("processing tagfiles...");fflush(stdout);
      WX_DoTagFileProcessing();
-//printf("done.\n");fflush(stdout);
-
+     //printf("done.\n");fflush(stdout);
   }
 
   // Next process tag files that need to be processed - Note that if timer is up, but we saved a data snapshot (and zeroed records) within 
   //1 minute we need to wait so there's enough time for new data to make it in.
   if (getMinutesToWait(configVarp->webcamSnapshotFrequency, time(NULL), lastWebcamSnapshotTime) == 0) {
-//printf("doing webcam snapshot...");fflush(stdout);
+     //printf("doing webcam snapshot...");fflush(stdout);
      WX_DoWebcamSnapshot();
-//printf("done.\n");fflush(stdout);
-
+     //printf("done.\n");fflush(stdout);
   }
   // Next,  process ftp uploads that need to be processed
  if (getMinutesToWait(configVarp->ftpUploadFrequency, time(NULL), lastFtpUploadTime) == 0) {
-//DPRINTF("Doing FTP upload at %s", asctime(localtime(&lastFtpUploadTime)));
-//if (1) {
-//printf("Ftp upload...");fflush(stdout);
+  //DPRINTF("Doing FTP upload at %s", asctime(localtime(&lastFtpUploadTime)));
+  //if (1) {
+  //printf("Ftp upload...");fflush(stdout);
   WX_DoFtpUpload();
-//printf("done.\n");fflush(stdout);
+  //printf("done.\n");fflush(stdout);
   }
 }
 
@@ -159,10 +166,10 @@ void checkForSensorTimeouts() {
   if (checkSensorForTimeout(&wxDatap->wg.Timestamp))
     wxDatap->wg.DataTimeoutCount++;
     
-  	int sensorIdx;
-	for (sensorIdx=0;sensorIdx<=MAX_SENSOR_CHANNEL_INDEX;sensorIdx++)
-	  if (checkSensorForTimeout(&wxDatap->ext[sensorIdx].Timestamp))
-	    wxDatap->ext[sensorIdx].DataTimeoutCount++;
+  int sensorIdx;
+  for (sensorIdx=0;sensorIdx<=MAX_SENSOR_CHANNEL_INDEX;sensorIdx++)
+     if (checkSensorForTimeout(&wxDatap->ext[sensorIdx].Timestamp))
+       wxDatap->ext[sensorIdx].DataTimeoutCount++;
 }
 
 void WX_DoConfigFileRead()
@@ -203,8 +210,7 @@ void WX_DoTagFileProcessing()
   int i;
 
   for(i=0;i<configVarp->NumTagFilesToParse;i++)
-      WX_ReplaceTagsInTextFile(configVarp->tagFiles[i].inFile,
-                                   configVarp->tagFiles[i].outFile);
+     WX_ReplaceTagsInTextFile(configVarp->tagFiles[i].inFile, configVarp->tagFiles[i].outFile);
   lastTagProcTime = time(NULL);
   tagProcCnt++;
 }
@@ -235,32 +241,31 @@ int WX_DoFtpUpload(void)
   int i, ftpResult, retVal, xferCount = 0;
   char str[250];
   
-/* ncftpput -unnnnnnnnnnnn -pxxxxxx ftp.server.com Weather tstfile"); */
-			for(i=0;i<configVarp->numFilesToFtp;i++) {
-			sprintf(str, "ncftpput -t30 -V -u%s -p%s %s %s %s",  
-			   configVarp->ftpServerUsername,configVarp->ftpServerPassword,  configVarp->ftpServerHostname, 
-			   configVarp->ftpFiles[i].destpath,configVarp->ftpFiles[i].filename);
-			if ((ftpResult = system(str))) {
-			  DPRINTF("NCFTPPUT: Error %d putting %s to %s\n",ftpResult, configVarp->ftpFiles[i].filename, configVarp->ftpFiles[i].destpath);
-              break;
-			}
-			else
-		      xferCount++; // successful
-           }
+  /* ncftpput -unnnnnnnnnnnn -pxxxxxx ftp.server.com Weather tstfile"); */
+  for(i=0;i<configVarp->numFilesToFtp;i++) {
+     sprintf(str, "ncftpput -t30 -V -u%s -p%s %s %s %s",  
+            configVarp->ftpServerUsername,configVarp->ftpServerPassword,  configVarp->ftpServerHostname, 
+            configVarp->ftpFiles[i].destpath,configVarp->ftpFiles[i].filename);
+     if ((ftpResult = system(str))) {
+        DPRINTF("NCFTPPUT: Error %d putting %s to %s\n",ftpResult, configVarp->ftpFiles[i].filename, configVarp->ftpFiles[i].destpath);
+        break;
+     } else
+        xferCount++; // successful
+  }
   if (xferCount == configVarp->numFilesToFtp)
-     retVal=1;
+    retVal=1;
   else
-     retVal=0;
+    retVal=0;
 
   lastFtpUploadTime = time(NULL);
   ftpUploadCnt++;
 
-	return(retVal);
+  return(retVal);
 }
 
 void updateCurrentTime(WX_Data *weatherDatap) {
    time_t timeNow = time(NULL);
-	weatherDatap->currentTime.timet = timeNow;
+   weatherDatap->currentTime.timet = timeNow;
 }
 
 // Determine the remaining wait time before an action should be done.  This routine tries to sync up occurances so they fall on the
@@ -307,30 +312,29 @@ void printSchedulerAction(FILE *fd, char *label, time_t *lastOccurancep,
   char *timeStr;
   time_t currentTime = time(NULL);
 
-	remaining = getMinutesToWait(frequency, currentTime, *lastOccurancep);
+  remaining = getMinutesToWait(frequency, currentTime, *lastOccurancep);
 
   timeStr = asctime(localtime(lastOccurancep));
  
-   if (strlen(timeStr) != 0)
-      timeStr[strlen(timeStr)-1] = 0;
+  if (strlen(timeStr) != 0)
+     timeStr[strlen(timeStr)-1] = 0;
 
-   fprintf(fd,"%14s  %s   %4d        %3d      ",label, timeStr, count, frequency);
-   if (frequency != 0)
+  fprintf(fd,"%14s  %s   %4d        %3d      ",label, timeStr, count, frequency);
+  if (frequency != 0)
      fprintf(fd,"%02d:%02d\n", remaining/60 , remaining % 60);
-   else
+  else
      fprintf(fd,"--:--\n");
-
 }
 
 void WX_DumpSchedulerInfo(FILE *fd)
 {
   time_t timeNow = time(NULL);
 
-fprintf(fd, "\nCurrent System Time: %s", asctime(localtime(&timeNow)));
-fprintf(fd, "\n");
-fprintf(fd, "                                            Total   Frequency Remaining\n");
-fprintf(fd, "Action          Last Occurance           Occurances   (min)    (hh:mm)\n");
-fprintf(fd, "--------------  ------------------------ ---------- --------- ---------\n");
+  fprintf(fd, "\nCurrent System Time: %s", asctime(localtime(&timeNow)));
+  fprintf(fd, "\n");
+  fprintf(fd, "                                            Total   Frequency Remaining\n");
+  fprintf(fd, "Action          Last Occurance           Occurances   (min)    (hh:mm)\n");
+  fprintf(fd, "--------------  ------------------------ ---------- --------- ---------\n");
   printSchedulerAction(fd, "Read Conf File",  
      &lastConfProcTime, configProcCnt,configVarp->configFileReadFrequency);
   printSchedulerAction(fd, "Save  Snapshot",  

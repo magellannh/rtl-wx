@@ -1,14 +1,25 @@
 
 /*========================================================================
 
-	TagProc.c
-	
-	This module contains routines to support automatic updates of weather data
-	through the use of predefined TAGS which are replaced in a text or html file
-	live weather station data.
+   TagProc.c
+   
+   This module contains routines to support automatic updates of weather data
+   through the use of predefined TAGS which are replaced in a text or html file
+   live weather station data.
 
-    For an example of the Tags and options that are supported by the parser, see the
+   For an example of the Tags and options that are supported by the parser, see the
    file wxTagTest.in
+
+   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS
+   OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+   AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT HOLDERS
+   OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+   CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+   ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+   OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF OR INABILITY TO USE THIS SOFTWARE, EVEN IF
+   THE COPYRIGHT HOLDERS OR CONTRIBUTORS ARE AWARE OF THE POSSIBILITY OF SUCH DAMAGE.
+   
 ========================================================================*/
 
 #include <string.h>
@@ -60,9 +71,8 @@ void formatBatteryField(BOOL batteryLow, ParserControlVars *pVars)
         strcpy(pVars->outputStr,&pVars->formatControlStr[1]);
       else if (pVars->formatControlStr[0] == 'B')
         strcpy(pVars->outputStr,"1");
-      }
-    else if (pVars->formatControlStr[0] == 'B')
-        strcpy(pVars->outputStr,"0");
+    } else if (pVars->formatControlStr[0] == 'B')
+      strcpy(pVars->outputStr,"0");
   }
 }
 void formatTemperatureField(float temp, ParserControlVars *pVars)
@@ -71,7 +81,7 @@ void formatTemperatureField(float temp, ParserControlVars *pVars)
       if (pVars->formatControlStr[0] != 'C') // C - celcius
          temp = temp*1.8+32; // convert to farenheit
       sprintf(pVars->outputStr,"%4.1f", temp);
-      }
+   }
 }
 void formatRelHumField(int relHum, ParserControlVars *pVars)
 {
@@ -154,10 +164,10 @@ void formatWindchillField(int windchill, BOOL chillvalid, ParserControlVars *pVa
 
     // Check for format options from end of tag
     for (i=0;i<strlen(str);i++)
-    if (str[i] == 'R')
-      raw = TRUE;
-    else if (str[i] == 'C')
-      celcius = TRUE;
+      if (str[i] == 'R')
+        raw = TRUE;
+      else if (str[i] == 'C')
+        celcius = TRUE;
     
     if ((chillvalid == FALSE) && (raw == FALSE))
       sprintf(pVars->outputStr,"HH.H");
@@ -168,10 +178,10 @@ void formatWindchillField(int windchill, BOOL chillvalid, ParserControlVars *pVa
 void formatChillValidField(BOOL chillValid,ParserControlVars *pVars)
 {
   if (checkAndHandleNoData(pVars) == FALSE) {
-	  if (chillValid== TRUE)
-		  sprintf(pVars->outputStr, "1");
-	  else 
-		  sprintf(pVars->outputStr, "0");
+     if (chillValid== TRUE)
+        sprintf(pVars->outputStr, "1");
+     else 
+        sprintf(pVars->outputStr, "0");
   }
 }
 
@@ -185,23 +195,23 @@ char *textMonth[] = { "January", "February", "March", "April", "May","June",
 // Pelles C free at:  http://smorgasbordet.com/pellesc/index.htm
 // given month, day, year, returns day of week, eg. Monday = 0 etc.
 char *getDayOfWeek(int month, int day, int year)
-{	
+{   
   int ix, tx, vx;
   char buf[20];
 
   switch (month) {
-    case 2  :
-	case 6  : vx = 0; break;
-	case 8  : vx = 4; break;
-	case 10 : vx = 8; break;
-	case 9  :
-	case 12 : vx = 12; break;
-	case 3  :
-	case 11 : vx = 16; break;
-	case 1  :
-	case 5  : vx = 20; break;
-	case 4  :
-	case 7  : vx = 24; break;
+   case 2  :
+   case 6  : vx = 0; break;
+   case 8  : vx = 4; break;
+   case 10 : vx = 8; break;
+   case 9  :
+   case 12 : vx = 12; break;
+   case 3  :
+   case 11 : vx = 16; break;
+   case 1  :
+   case 5  : vx = 20; break;
+   case 4  :
+   case 7  : vx = 24; break;
   }
   if (year > 1900)  // 1900 was not a leap year
     year -= 1900;
@@ -242,11 +252,11 @@ void processTimestampField(char *tsParams, ParserControlVars *pVars)
     // TSDATE - Need to handle no data case specially
     if (ts->PktCnt == 0) {
       if (pVars->formatForNoData == 'D')
-	       sprintf(pVars->outputStr,"--/--/----");
+          sprintf(pVars->outputStr,"--/--/----");
       else if (pVars->formatForNoData == 'S')
          strcpy(pVars->outputStr, pVars->NoDataStr);       
       else
-	       sprintf(pVars->outputStr,"00/00/0000");
+          sprintf(pVars->outputStr,"00/00/0000");
     }
     else {
       sprintf(pVars->outputStr,"%02d/%02d/%04d", localts->tm_mon+1, localts->tm_mday, localts->tm_year+1900);  
@@ -339,45 +349,45 @@ void processIduTag(ParserControlVars *pVars)
   pVars->ts = &pVars->weatherDatap->idu.Timestamp;
 
   if (strcmp(pVars->fieldToGet,"BATTERY") == 0)
-		formatBatteryField(pVars->weatherDatap->idu.BatteryLow, pVars);
+      formatBatteryField(pVars->weatherDatap->idu.BatteryLow, pVars);
   else if (strcmp(pVars->fieldToGet,"TEMP") == 0) {
     pVars->ts = &pVars->weatherDatap->idu.TempTimestamp;
-		formatTemperatureField(pVars->weatherDatap->idu.Temp, pVars);
+      formatTemperatureField(pVars->weatherDatap->idu.Temp, pVars);
   }
   else if (strcmp(pVars->fieldToGet,"HUMIDITY") == 0) {
     pVars->ts = &pVars->weatherDatap->idu.RelHumTimestamp;
-		formatRelHumField(pVars->weatherDatap->idu.RelHum, pVars);
+      formatRelHumField(pVars->weatherDatap->idu.RelHum, pVars);
   }
   else if (strcmp(pVars->fieldToGet,"DEWPOINT") == 0) {
     pVars->ts = &pVars->weatherDatap->idu.RelHumTimestamp;
-		formatDewpointField(pVars->weatherDatap->idu.Dewpoint, pVars);
+      formatDewpointField(pVars->weatherDatap->idu.Dewpoint, pVars);
   }
   else if (strcmp(pVars->fieldToGet,"PRESSURE") == 0) {
     pVars->ts = &pVars->weatherDatap->idu.PressureTimestamp;
-		formatPressureField(pVars->weatherDatap->idu.Pressure, pVars);
+      formatPressureField(pVars->weatherDatap->idu.Pressure, pVars);
   }
   else if (strncmp(pVars->fieldToGet,"TEMP-TS",7) == 0) {
     pVars->ts = &pVars->weatherDatap->idu.TempTimestamp;
-		processTimestampField(&pVars->fieldToGet[5], pVars);
+      processTimestampField(&pVars->fieldToGet[5], pVars);
   }
   else if (strncmp(pVars->fieldToGet,"HUMIDITY-TS",11) == 0) {
     pVars->ts = &pVars->weatherDatap->idu.RelHumTimestamp;
-		processTimestampField(&pVars->fieldToGet[9], pVars);
+      processTimestampField(&pVars->fieldToGet[9], pVars);
   }
   else if (strncmp(pVars->fieldToGet,"DEWPOINT-TS",11) == 0) {
     pVars->ts = &pVars->weatherDatap->idu.RelHumTimestamp;
-		processTimestampField(&pVars->fieldToGet[9], pVars);
+      processTimestampField(&pVars->fieldToGet[9], pVars);
   }
   else if (strncmp(pVars->fieldToGet,"PRESSURE-TS",11) == 0) {
     pVars->ts = &pVars->weatherDatap->idu.PressureTimestamp;
-		processTimestampField(&pVars->fieldToGet[9], pVars);
+      processTimestampField(&pVars->fieldToGet[9], pVars);
   }
   else if (strcmp(pVars->fieldToGet,"FORECAST") == 0)
-		formatForecastField(pVars->weatherDatap->idu.ForecastStr, pVars);
+      formatForecastField(pVars->weatherDatap->idu.ForecastStr, pVars);
   else if (strcmp(pVars->fieldToGet,"SEALEVELOFFSET") == 0)
-		formatPressureField(pVars->weatherDatap->idu.SeaLevelOffset, pVars);
+      formatPressureField(pVars->weatherDatap->idu.SeaLevelOffset, pVars);
   else if (strncmp(pVars->fieldToGet,"TS",2) == 0)
-		processTimestampField(pVars->fieldToGet, pVars);
+      processTimestampField(pVars->fieldToGet, pVars);
   else
     sprintf(pVars->outputStr,"WXERROR_IDUTAG-%s",pVars->fieldToGet);
 }
@@ -390,33 +400,33 @@ void procesOduTag(ParserControlVars *pVars)
   pVars->ts = &pVars->weatherDatap->odu.Timestamp;
 
   if (strcmp(pVars->fieldToGet,"BATTERY") == 0)
-		formatBatteryField(pVars->weatherDatap->odu.BatteryLow, pVars);
+      formatBatteryField(pVars->weatherDatap->odu.BatteryLow, pVars);
   else if (strcmp(pVars->fieldToGet,"TEMP") == 0) {
     pVars->ts = &pVars->weatherDatap->odu.TempTimestamp;
-		formatTemperatureField(pVars->weatherDatap->odu.Temp, pVars);
+      formatTemperatureField(pVars->weatherDatap->odu.Temp, pVars);
   }
   else if (strcmp(pVars->fieldToGet,"HUMIDITY") == 0) {
     pVars->ts = &pVars->weatherDatap->odu.RelHumTimestamp;
-		formatRelHumField(pVars->weatherDatap->odu.RelHum, pVars);
+      formatRelHumField(pVars->weatherDatap->odu.RelHum, pVars);
   }
   else if (strcmp(pVars->fieldToGet,"DEWPOINT") == 0) {
     pVars->ts = &pVars->weatherDatap->odu.DewpointTimestamp;
-		formatDewpointField(pVars->weatherDatap->odu.Dewpoint, pVars);
+      formatDewpointField(pVars->weatherDatap->odu.Dewpoint, pVars);
   }
   else if (strncmp(pVars->fieldToGet,"TEMP-TS",7) == 0) {
     pVars->ts = &pVars->weatherDatap->odu.TempTimestamp;
-		processTimestampField(&pVars->fieldToGet[5], pVars);
+      processTimestampField(&pVars->fieldToGet[5], pVars);
   }
   else if (strncmp(pVars->fieldToGet,"HUMIDITY-TS",11) == 0) {
     pVars->ts = &pVars->weatherDatap->odu.RelHumTimestamp;
-		processTimestampField(&pVars->fieldToGet[9], pVars);
+      processTimestampField(&pVars->fieldToGet[9], pVars);
   }
   else if (strncmp(pVars->fieldToGet,"DEWPOINT-TS",11) == 0) {
     pVars->ts = &pVars->weatherDatap->odu.DewpointTimestamp;
-		processTimestampField(&pVars->fieldToGet[9], pVars);
+      processTimestampField(&pVars->fieldToGet[9], pVars);
   } 
   else if (strncmp(pVars->fieldToGet,"TS",2) == 0)
-		processTimestampField(pVars->fieldToGet, pVars);
+      processTimestampField(pVars->fieldToGet, pVars);
   else
     sprintf(pVars->outputStr,"WXERROR_ODUTAG-%s",pVars->fieldToGet);
 }
@@ -428,33 +438,33 @@ void procesExtTag(int sensorIdx, ParserControlVars *pVars)
   pVars->ts = &pVars->weatherDatap->ext[sensorIdx].Timestamp;
 
   if (strcmp(pVars->fieldToGet,"BATTERY") == 0)
-		formatBatteryField(pVars->weatherDatap->ext[sensorIdx].BatteryLow, pVars);
+      formatBatteryField(pVars->weatherDatap->ext[sensorIdx].BatteryLow, pVars);
   else if (strcmp(pVars->fieldToGet,"TEMP") == 0) {
     pVars->ts = &pVars->weatherDatap->ext[sensorIdx].TempTimestamp;
-		formatTemperatureField(pVars->weatherDatap->ext[sensorIdx].Temp, pVars);
+      formatTemperatureField(pVars->weatherDatap->ext[sensorIdx].Temp, pVars);
   }
   else if (strcmp(pVars->fieldToGet,"HUMIDITY") == 0) {
     pVars->ts = &pVars->weatherDatap->ext[sensorIdx].RelHumTimestamp;
-		formatRelHumField(pVars->weatherDatap->ext[sensorIdx].RelHum, pVars);
+      formatRelHumField(pVars->weatherDatap->ext[sensorIdx].RelHum, pVars);
   }
   else if (strcmp(pVars->fieldToGet,"DEWPOINT") == 0) {
     pVars->ts = &pVars->weatherDatap->ext[sensorIdx].DewpointTimestamp;
-		formatDewpointField(pVars->weatherDatap->ext[sensorIdx].Dewpoint, pVars);
+      formatDewpointField(pVars->weatherDatap->ext[sensorIdx].Dewpoint, pVars);
   }
   else if (strncmp(pVars->fieldToGet,"TEMP-TS",7) == 0) {
     pVars->ts = &pVars->weatherDatap->ext[sensorIdx].TempTimestamp;
-		processTimestampField(&pVars->fieldToGet[5], pVars);
+      processTimestampField(&pVars->fieldToGet[5], pVars);
   }
   else if (strncmp(pVars->fieldToGet,"HUMIDITY-TS",11) == 0) {
     pVars->ts = &pVars->weatherDatap->ext[sensorIdx].RelHumTimestamp;
-		processTimestampField(&pVars->fieldToGet[9], pVars);
+      processTimestampField(&pVars->fieldToGet[9], pVars);
   }
   else if (strncmp(pVars->fieldToGet,"DEWPOINT-TS",11) == 0) {
     pVars->ts = &pVars->weatherDatap->ext[sensorIdx].DewpointTimestamp;
-		processTimestampField(&pVars->fieldToGet[9], pVars);
+      processTimestampField(&pVars->fieldToGet[9], pVars);
   } 
   else if (strncmp(pVars->fieldToGet,"TS",2) == 0)
-		processTimestampField(pVars->fieldToGet, pVars);
+      processTimestampField(pVars->fieldToGet, pVars);
   else
     sprintf(pVars->outputStr,"WXERROR_EXTTAG-%s",pVars->fieldToGet);
 }
@@ -466,26 +476,26 @@ void procesRgTag(ParserControlVars *pVars)
   pVars->ts = &pVars->weatherDatap->rg.Timestamp;
 
   if (strcmp(pVars->fieldToGet,"BATTERY") == 0)
-		formatBatteryField(pVars->weatherDatap->rg.BatteryLow, pVars);
+      formatBatteryField(pVars->weatherDatap->rg.BatteryLow, pVars);
   else if (strcmp(pVars->fieldToGet,"RAINRATE") == 0) {
     pVars->ts = &pVars->weatherDatap->rg.RateTimestamp;
-		formatRainField(pVars->weatherDatap->rg.Rate, pVars);
+      formatRainField(pVars->weatherDatap->rg.Rate, pVars);
   }
   else if (strncmp(pVars->fieldToGet,"RAINRATE-TS",11) == 0) {
     pVars->ts = &pVars->weatherDatap->rg.RateTimestamp;
-		processTimestampField(&pVars->fieldToGet[9], pVars);
+      processTimestampField(&pVars->fieldToGet[9], pVars);
   }
   else if (strcmp(pVars->fieldToGet,"RAINTOTAL") == 0)
-		formatRainField(pVars->weatherDatap->rg.Total, pVars);
+      formatRainField(pVars->weatherDatap->rg.Total, pVars);
 /* Total yesterday and rain reset are not supported now that we're getting data directly from sensors
   else if (strcmp(pVars->fieldToGet,"RAINYESTERDAY") == 0)
-		formatRainField(pVars->weatherDatap->rg.TotalYesterday, pVars);
+      formatRainField(pVars->weatherDatap->rg.TotalYesterday, pVars);
   else if (strcmp(pVars->fieldToGet,"RAINRESET") == 0)
     formatRainResetField(pVars);
   else if (strncmp(pVars->fieldToGet,"RR",2) == 0)
     formatRainResetField(pVars); */
   else if (strncmp(pVars->fieldToGet,"TS",2) == 0)
-		processTimestampField(pVars->fieldToGet, pVars);
+      processTimestampField(pVars->fieldToGet, pVars);
   else
     sprintf(pVars->outputStr,"WXERROR_RGTAG-%s",pVars->fieldToGet);
 }
@@ -517,17 +527,17 @@ void procesRainHistTag(ParserControlVars *pVars)
      formatRainField(sumRainDataRecords(1,recordsToSum), pVars);
   else if (strcmp(pVars->fieldToGet,"TOTALLASTWEEKBYDAY") == 0)
     {
-	int day;
-	for (day=6;day>=0;day--) {
-	        int startRecord=1+(day*24);
+   int day;
+   for (day=6;day>=0;day--) {
+           int startRecord=1+(day*24);
             int sum=sumRainDataRecords(startRecord,startRecord+23);
-			formatRainField(sum, pVars);
+         formatRainField(sum, pVars);
             if (day >0) {
-			  fputs(pVars->outputStr, pVars->outfd);
+           fputs(pVars->outputStr, pVars->outfd);
               fputc(pVars->spacerForMultipleRecords, pVars->outfd);
             }
-		}
-	}
+      }
+   }
   else
     sprintf(pVars->outputStr,"WXERROR_RGTAG-%s",pVars->fieldToGet);
 }
@@ -537,7 +547,7 @@ void procesWgTag(ParserControlVars *pVars)
   // Save the Wind  Gauge timestamp object in the parser control structure
   pVars->ts = &pVars->weatherDatap->wg.Timestamp;
   if (strcmp(pVars->fieldToGet,"BATTERY") == 0)
-		formatBatteryField(pVars->weatherDatap->wg.BatteryLow, pVars);
+      formatBatteryField(pVars->weatherDatap->wg.BatteryLow, pVars);
   else if (strcmp(pVars->fieldToGet,"BEARING") == 0)
     formatWindBearingField(pVars->weatherDatap->wg.Bearing, pVars);
   else if (strcmp(pVars->fieldToGet,"SPEED") == 0) {
@@ -564,7 +574,7 @@ void procesWgTag(ParserControlVars *pVars)
     processTimestampField(pVars->fieldToGet, pVars);
   else
     sprintf(pVars->outputStr,"WXERROR_WGTAG-%s",pVars->fieldToGet);
-}	
+}   
 
 //*************************************************************************************************************
 // Based on which sensor type was referenced in the Tag, dispatch to the correct processing routine for the specific sensor type
@@ -573,12 +583,12 @@ void processTag(ParserControlVars *pVars)
   // First see if the tag is a global formatting tag
   if (strcmp(pVars->sensorToGetFrom,"GLOBAL") == 0) {
     if (strcmp(pVars->fieldToGet,"NODATA") == 0) {
-	    pVars->formatForNoData = pVars->formatControlStr[0];
+       pVars->formatForNoData = pVars->formatControlStr[0];
       if (pVars->formatControlStr[0] == 'S')
         strcpy(pVars->NoDataStr, &pVars->formatControlStr[1]);
     }
     else if (strcmp(pVars->fieldToGet,"MULTISPACER") == 0) {
-	    pVars->spacerForMultipleRecords = pVars->formatControlStr[0];
+       pVars->spacerForMultipleRecords = pVars->formatControlStr[0];
     }
     else 
      sprintf(pVars->outputStr,"WXERROR_BADGLOBAL-%s",pVars->fieldToGet);
@@ -586,29 +596,29 @@ void processTag(ParserControlVars *pVars)
   else if (strcmp(pVars->sensorToGetFrom,"IDU") == 0)
       processIduTag(pVars);
   else if (strcmp(pVars->sensorToGetFrom,"ODU") == 0)
-      procesOduTag(pVars);		
+      procesOduTag(pVars);      
   else if (strcmp(pVars->sensorToGetFrom,"RG") == 0)
       procesRgTag(pVars);
   else if (strcmp(pVars->sensorToGetFrom,"RAINHIST") == 0)
       procesRainHistTag(pVars);  
   else if (strcmp(pVars->sensorToGetFrom,"WG") == 0)
-      procesWgTag(pVars);			
+      procesWgTag(pVars);         
   else if (strcmp(pVars->sensorToGetFrom,"EXT1") == 0)
       procesExtTag(0, pVars);
   else if (strcmp(pVars->sensorToGetFrom,"EXT2") == 0)
-      procesExtTag(1, pVars);			
+      procesExtTag(1, pVars);         
   else if (strcmp(pVars->sensorToGetFrom,"EXT3") == 0)
       procesExtTag(2, pVars);
   else if (strcmp(pVars->sensorToGetFrom,"EXT4") == 0)
       procesExtTag(3, pVars);
   else if (strcmp(pVars->sensorToGetFrom,"EXT5") == 0)
-      procesExtTag(4, pVars);			
+      procesExtTag(4, pVars);         
   else if (strcmp(pVars->sensorToGetFrom,"EXT6") == 0)
       procesExtTag(5, pVars);
   else if (strcmp(pVars->sensorToGetFrom,"EXT7") == 0)
       procesExtTag(6, pVars);
   else if (strcmp(pVars->sensorToGetFrom,"EXT8") == 0)
-      procesExtTag(7, pVars);			
+      procesExtTag(7, pVars);         
   else if (strcmp(pVars->sensorToGetFrom,"EXT9") == 0)
       procesExtTag(8, pVars);
   else if (strcmp(pVars->sensorToGetFrom,"EXT10") == 0)
@@ -625,7 +635,7 @@ void processTag(ParserControlVars *pVars)
       processTimestampField(pVars->sensorToGetFrom, pVars);
   }
   else
-			sprintf(pVars->outputStr,"WXERROR_BADSENSOR-%s",pVars->sensorToGetFrom);
+         sprintf(pVars->outputStr,"WXERROR_BADSENSOR-%s",pVars->sensorToGetFrom);
 }
 //*************************************************************************************************************
 // Routine to convert the Record Number part of the tag to actual record numbers.
@@ -693,13 +703,15 @@ BOOL extractTagParam(char *rdBuf, char *outStr, int *idx)
     DPRINTF("^\n");
     retVal = 1; // return error
    }
-  // If nothing found, return an error
-  //if (j==0)
-  //  retVal=1;
+   // If nothing found, return an error
+   //if (j==0)
+   //  retVal=1;
 
-  return(retVal);
+   return(retVal);
 }
-/*-----------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+/*-----------------------------------------------------------------------------------------------------------------------
   WX_ReplaceTagsInTextFile()
  
   This function opens two files, one for reading and one for writing, and copies the contents (char by char) from the input file
@@ -707,11 +719,11 @@ BOOL extractTagParam(char *rdBuf, char *outStr, int *idx)
 
   See the file wxTagTest.in for a complete listing of supported Tags and tag options.
 
-------------------------------------------------------------------------------------------------------------------------------------------------------*/
+-------------------------------------------------------------------------------------------------------------------------*/
 
 void WX_ReplaceTagsInTextFile(char *inFname, char *outFname)
 {
-	FILE *infd,*outfd;
+   FILE *infd,*outfd;
   char rdBuf[READ_BUFSIZE];
   char tagBuf[MAX_TAG_SIZE];
   ParserControlVars pVars;

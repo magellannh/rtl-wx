@@ -1,18 +1,18 @@
 
 /*========================================================================
 
-	DataStore.c
-	
-	This module contains routines to support storage of historical weather station data
-	The functionality includes saving a preset number of complete weather station records
-     as well as support for saving min and max values for selected data fields
+   DataStore.c
+   
+   This module contains routines to support storage of historical weather station data
+   The functionality includes saving a preset number of complete weather station records
+   as well as support for saving min and max values for selected data fields
 
-     Data records are saved using a first in never out ring buffer.  Once the max number of
-     records to store is reached, saving additional records causes the oldest record to be 
-     discarded.  Data is never pulled out of the ring, bug rather it is replaced by newer data.
+   Data records are saved using a first in never out ring buffer.  Once the max number of
+   records to store is reached, saving additional records causes the oldest record to be 
+   discarded.  Data is never pulled out of the ring, bug rather it is replaced by newer data.
 
-    Data inside the ring can be referenced by requesting a specific historical record number.
-    historical record 1 returns the newest record.  The larger the record number requested, the
+   Data inside the ring can be referenced by requesting a specific historical record number.
+   historical record 1 returns the newest record.  The larger the record number requested, the
    older the data.  The largest record number that can be requested is maxRecordCount
 
    There's also a separate rain data ring buffer.  This ring buffer works essentially the
@@ -20,6 +20,17 @@
    which represents the rainfall (in mm) since the last record was captured.  This data
    is stored seperately to support different save frequency and storage amounts for
    this data (eg. able to store 1 week of data instead of just 1 day).
+   
+   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS
+   OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+   AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT HOLDERS
+   OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+   CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+   ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+   OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF OR INABILITY TO USE THIS SOFTWARE, EVEN IF
+   THE COPYRIGHT HOLDERS OR CONTRIBUTORS ARE AWARE OF THE POSSIBILITY OF SUCH DAMAGE.
+   
 ========================================================================*/
 
 #include <string.h>
@@ -178,8 +189,8 @@ void WX_SaveRainDataRecord(WX_Data *weatherDatap)
   }
 
   if (rainInitComplete == 0) {
-	 rainTotalAtLastSave=rainTotal; // At startup, have to save device total to avoid counting it as "new" rainfall
-	 rainInitComplete = 1;
+    rainTotalAtLastSave=rainTotal; // At startup, have to save device total to avoid counting it as "new" rainfall
+    rainInitComplete = 1;
   }
   if (rainTotal < rainTotalAtLastSave)
     rainRingBuffer[rainInIndex] = rainTotal;
@@ -187,13 +198,11 @@ void WX_SaveRainDataRecord(WX_Data *weatherDatap)
     rainRingBuffer[rainInIndex] = rainTotal-rainTotalAtLastSave;
   //DPRINTF("SavingRainDataRecord:  index: %d value: %d last value: %d\n",rainInIndex,rainRingBuffer[rainInIndex],rainTotalAtLastSave);
  
- rainTotalAtLastSave = rainTotal;
- 
+  rainTotalAtLastSave = rainTotal;
  
   rainInIndex++;
   if ( rainInIndex >= maxRainRecordCount )
      rainInIndex = 0;
-      
 
 }
 
@@ -277,76 +286,76 @@ int isNewIntLower(int newxData, WX_Timestamp *newTs, int minData, WX_Timestamp *
 //--------------------------------------------------------------------------------------------------------------------------------------------
 void updateMinData(WX_Data *datap)
 {
- int sensorIdx;
+  int sensorIdx;
 
- if (isNewFloatLower(datap->wg.Speed,  &datap->wg.SpeedTimestamp,
+  if (isNewFloatLower(datap->wg.Speed,  &datap->wg.SpeedTimestamp,
                     minData.wg.Speed, &minData.wg.SpeedTimestamp) == TRUE) {
     minData.wg.Speed = datap->wg.Speed;
     minData.wg.SpeedTimestamp = datap->wg.SpeedTimestamp;
- }
- if (isNewFloatLower(datap->wg.AvgSpeed,  &datap->wg.AvgSpeedTimestamp,
+  }
+  if (isNewFloatLower(datap->wg.AvgSpeed,  &datap->wg.AvgSpeedTimestamp,
                     minData.wg.AvgSpeed, &minData.wg.AvgSpeedTimestamp) == TRUE) {
     minData.wg.AvgSpeed = datap->wg.AvgSpeed;
     minData.wg.AvgSpeedTimestamp = datap->wg.AvgSpeedTimestamp;
- } 
- if (isNewIntLower(datap->rg.Rate,  &datap->rg.RateTimestamp,
+  } 
+  if (isNewIntLower(datap->rg.Rate,  &datap->rg.RateTimestamp,
                   minData.rg.Rate, &minData.rg.RateTimestamp) == TRUE) {
     minData.rg.Rate = datap->rg.Rate;
     minData.rg.RateTimestamp = datap->rg.RateTimestamp;
- } 
- if (isNewFloatLower(datap->odu.Temp,  &datap->odu.TempTimestamp,
+  } 
+  if (isNewFloatLower(datap->odu.Temp,  &datap->odu.TempTimestamp,
                     minData.odu.Temp, &minData.odu.TempTimestamp) == TRUE) {
     minData.odu.Temp = datap->odu.Temp;
     minData.odu.TempTimestamp = datap->odu.TempTimestamp;
- } 
- if (isNewIntLower(datap->odu.RelHum,  &datap->odu.RelHumTimestamp,
+  } 
+  if (isNewIntLower(datap->odu.RelHum,  &datap->odu.RelHumTimestamp,
                   minData.odu.RelHum, &minData.odu.RelHumTimestamp) == TRUE) {
     minData.odu.RelHum = datap->odu.RelHum;
     minData.odu.RelHumTimestamp = datap->odu.RelHumTimestamp;
- } 
- if (isNewFloatLower(datap->odu.Dewpoint,  &datap->odu.DewpointTimestamp,
+  } 
+  if (isNewFloatLower(datap->odu.Dewpoint,  &datap->odu.DewpointTimestamp,
                     minData.odu.Dewpoint, &minData.odu.DewpointTimestamp) == TRUE) {
     minData.odu.Dewpoint = datap->odu.Dewpoint;
     minData.odu.DewpointTimestamp = datap->odu.DewpointTimestamp;
- } 
- if (isNewFloatLower(datap->idu.Temp,  &datap->idu.TempTimestamp,
+  } 
+  if (isNewFloatLower(datap->idu.Temp,  &datap->idu.TempTimestamp,
                     minData.idu.Temp, &minData.idu.TempTimestamp) == TRUE) {
     minData.idu.Temp = datap->idu.Temp;
     minData.idu.TempTimestamp = datap->idu.TempTimestamp;
- } 
- if (isNewIntLower(datap->idu.RelHum,  &datap->idu.RelHumTimestamp,
+  } 
+  if (isNewIntLower(datap->idu.RelHum,  &datap->idu.RelHumTimestamp,
                   minData.idu.RelHum, &minData.idu.RelHumTimestamp) == TRUE) {
     minData.idu.RelHum = datap->idu.RelHum;
     minData.idu.RelHumTimestamp = datap->idu.RelHumTimestamp;
- } 
- if (isNewFloatLower(datap->idu.Dewpoint,  &datap->idu.DewpointTimestamp,
+  } 
+  if (isNewFloatLower(datap->idu.Dewpoint,  &datap->idu.DewpointTimestamp,
                     minData.idu.Dewpoint, &minData.idu.DewpointTimestamp) == TRUE) {
     minData.idu.Dewpoint = datap->idu.Dewpoint;
     minData.idu.DewpointTimestamp = datap->idu.DewpointTimestamp;
- } 
- if (isNewIntLower(datap->idu.Pressure,  &datap->idu.PressureTimestamp,
+  } 
+  if (isNewIntLower(datap->idu.Pressure,  &datap->idu.PressureTimestamp,
                   minData.idu.Pressure, &minData.idu.PressureTimestamp) == TRUE) {
     minData.idu.Pressure = datap->idu.Pressure;
     minData.idu.PressureTimestamp = datap->idu.PressureTimestamp;
- } 
- for (sensorIdx=0;sensorIdx <= MAX_SENSOR_CHANNEL_INDEX; sensorIdx++) {
-  if (isNewFloatLower(datap->ext[sensorIdx].Temp,  &datap->ext[sensorIdx].TempTimestamp,
+  } 
+  for (sensorIdx=0;sensorIdx <= MAX_SENSOR_CHANNEL_INDEX; sensorIdx++) {
+   if (isNewFloatLower(datap->ext[sensorIdx].Temp,  &datap->ext[sensorIdx].TempTimestamp,
                      minData.ext[sensorIdx].Temp, &minData.ext[sensorIdx].TempTimestamp) == TRUE) {
 
     minData.ext[sensorIdx].Temp = datap->ext[sensorIdx].Temp;
     minData.ext[sensorIdx].TempTimestamp = datap->ext[sensorIdx].TempTimestamp;
-  } 
- if (isNewIntLower(datap->ext[sensorIdx].RelHum,  &datap->ext[sensorIdx].RelHumTimestamp,
+   } 
+   if (isNewIntLower(datap->ext[sensorIdx].RelHum,  &datap->ext[sensorIdx].RelHumTimestamp,
                   minData.ext[sensorIdx].RelHum, &minData.ext[sensorIdx].RelHumTimestamp) == TRUE) {
     minData.ext[sensorIdx].RelHum = datap->ext[sensorIdx].RelHum;
     minData.ext[sensorIdx].RelHumTimestamp = datap->ext[sensorIdx].RelHumTimestamp;
-  } 
- if (isNewFloatLower(datap->ext[sensorIdx].Dewpoint,  &datap->ext[sensorIdx].DewpointTimestamp,
+   } 
+   if (isNewFloatLower(datap->ext[sensorIdx].Dewpoint,  &datap->ext[sensorIdx].DewpointTimestamp,
                     minData.ext[sensorIdx].Dewpoint, &minData.ext[sensorIdx].DewpointTimestamp) == TRUE) {
     minData.ext[sensorIdx].Dewpoint = datap->ext[sensorIdx].Dewpoint;
     minData.ext[sensorIdx].DewpointTimestamp = datap->ext[sensorIdx].DewpointTimestamp;
-  } 
- }
+   } 
+  }
 }
 
 int isNewFloatHigher(float newxData, WX_Timestamp *newTs, float maxData, WX_Timestamp *maxTs)

@@ -1,23 +1,33 @@
 
 /*========================================================================
     
-	SlugWx.h
+   SlugWx.h
     
-	This provides state machine structs for reading serial data coming from
-	Oregon Scientific weather sensors.
+   This provides state machine structs for reading serial data coming from
+   Oregon Scientific weather sensors.
 
-	The extenal interface to this functionality can be found at the
-	bottom of this file (the top bits are declarations for packet
-	structures).
-    
+   The extenal interface to this functionality can be found at the
+   bottom of this file (the top bits are declarations for packet
+   structures).
+
+   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS
+   OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+   AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT HOLDERS
+   OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+   CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+   ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+   OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF OR INABILITY TO USE THIS SOFTWARE, EVEN IF
+   THE COPYRIGHT HOLDERS OR CONTRIBUTORS ARE AWARE OF THE POSSIBILITY OF SUCH DAMAGE.
+       
 ========================================================================*/
 #ifndef __SLUGWX_h
 #define __SLUGWX_h
 #include <time.h>
 
-#define CONFIG_FILE_PATH	"rtl-wx.conf"
-#define LOG_FILE_PATH		"rtl-wx.log"
-#define DEFAULT_WORKING_DIR	"../www"
+#define CONFIG_FILE_PATH   "rtl-wx.conf"
+#define LOG_FILE_PATH      "rtl-wx.log"
+#define DEFAULT_WORKING_DIR   "../www"
 
 typedef enum _BOOL { FALSE = 0, TRUE } BOOL;
 
@@ -35,8 +45,8 @@ typedef enum _BOOL { FALSE = 0, TRUE } BOOL;
 //
 typedef struct WX_timestamp
 {
-unsigned int	PktCnt;       // Value of global pkt count when timestamp was taken
-time_t			timet;
+unsigned int   PktCnt;       // Value of global pkt count when timestamp was taken
+time_t         timet;
 } WX_Timestamp;
 
 
@@ -45,27 +55,27 @@ typedef struct WX_wind_gauge_data
 WX_Timestamp Timestamp;
 WX_Timestamp SpeedTimestamp;
 WX_Timestamp AvgSpeedTimestamp;
-BOOL		BatteryLow;
-int	   LockCode;
-int		LockCodeMismatchCount;
+BOOL     BatteryLow;
+int      LockCode;
+int      LockCodeMismatchCount;
 int      DataTimeoutCount;
-int		Bearing;	   //°
-float		Speed;		//m/sec
-float		AvgSpeed;	//m/sec
-BOOL		ChillValid;	//not overrun and not invalid
-int		WindChill;	//°C
+int      Bearing;      //°
+float    Speed;        //m/sec
+float    AvgSpeed;     //m/sec
+BOOL     ChillValid;   //not overrun and not invalid
+int      WindChill;    //°C
 } WX_WindGaugeData;
 
 typedef struct WX_rain_gauge_gata
 {
 WX_Timestamp Timestamp;
 WX_Timestamp RateTimestamp;
-BOOL		BatteryLow;
+BOOL     BatteryLow;
 int      LockCode;
-int		LockCodeMismatchCount;
+int      LockCodeMismatchCount;
 int      DataTimeoutCount;
-int	   Rate;		         //mm/hr
-int		Total;		      //mm
+int      Rate;               //mm/hr
+int      Total;              //mm
 } WX_RainGaugeData;
 
 typedef struct WX_outdoor_unit_data
@@ -74,14 +84,14 @@ WX_Timestamp Timestamp;
 WX_Timestamp TempTimestamp;
 WX_Timestamp RelHumTimestamp;
 WX_Timestamp DewpointTimestamp;
-BOOL		BatteryLow;
+BOOL     BatteryLow;
 int      LockCode;
-int		LockCodeMismatchCount;
+int      LockCodeMismatchCount;
 int      DataTimeoutCount;
-int		Channel;	   //(don't think this is relevant for this unit)
-float		Temp;		   //°C
-int		RelHum;		//%
-float		Dewpoint;	//°C
+int      Channel;      //(don't think this is relevant for this unit)
+float    Temp;         //°C
+int      RelHum;       //%
+float    Dewpoint;     //°C
 } WX_OutdoorUnitData;
 
 typedef struct WX_indoor_unit_data
@@ -91,16 +101,16 @@ WX_Timestamp TempTimestamp;
 WX_Timestamp RelHumTimestamp;
 WX_Timestamp DewpointTimestamp;
 WX_Timestamp PressureTimestamp;
-BOOL		BatteryLow;
-int   	LockCode;
-int		LockCodeMismatchCount;
+BOOL     BatteryLow;
+int      LockCode;
+int      LockCodeMismatchCount;
 int      DataTimeoutCount;
-float		Temp;		      //°C
-int		RelHum;		   //%
-float		Dewpoint;	   //°C
-int		Pressure;	   //mbar
-char    	*ForecastStr;	//3 == rain, 6 == partly cloudy, 2 == cloudy, 12 == sunny
-int		SeaLevelOffset;// mbar
+float    Temp;           //°C
+int      RelHum;         //%
+float    Dewpoint;       //°C
+int      Pressure;       //mbar
+char     *ForecastStr;   //3 == rain, 6 == partly cloudy, 2 == cloudy, 12 == sunny
+int      SeaLevelOffset; // mbar
 } WX_IndoorUnitData;
 
 typedef struct WX_extra_sensor_data
@@ -109,13 +119,13 @@ WX_Timestamp Timestamp;
 WX_Timestamp TempTimestamp;
 WX_Timestamp RelHumTimestamp;
 WX_Timestamp DewpointTimestamp;
-BOOL		BatteryLow;
+BOOL     BatteryLow;
 int      LockCode;
-int		LockCodeMismatchCount;
+int      LockCodeMismatchCount;
 int      DataTimeoutCount;
-float		Temp;		   //°C
-int		RelHum;		//%
-float		Dewpoint;	//°C
+float    Temp;         //°C
+int      RelHum;       //%
+float    Dewpoint;     //°C
 } WX_ExtraSensorData;
 
 #define MAX_SENSOR_CHANNEL_INDEX 9
@@ -231,14 +241,14 @@ typedef struct _WX_ConfigSettings
 
  int webcamSnapshotFrequency;
 
- int ftpUploadFrequency;		// Minutes
+ int ftpUploadFrequency;      // Minutes
  char ftpServerHostname[MAX_CONFIG_NAME_SIZE];
  char ftpServerUsername[MAX_CONFIG_NAME_SIZE];
  char ftpServerPassword[MAX_CONFIG_NAME_SIZE];
  int  numFilesToFtp;
  WX_FtpFile ftpFiles[MAX_CONFIG_LIST_SIZE];
  
- int  mailSendFrequency;		// hours
+ int  mailSendFrequency;      // hours
  char mailServerHostname[MAX_CONFIG_NAME_SIZE];
  char mailServerUsername[MAX_CONFIG_NAME_SIZE];
  char mailServerPassword[MAX_CONFIG_NAME_SIZE];

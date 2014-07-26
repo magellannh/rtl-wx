@@ -1,12 +1,22 @@
 /*========================================================================
-	Utils.c
-	
-     Utility functions used by the SlugWx weather monitor.  Mostly routines to dump 
-     various data structures for debug or status reporting.
+   Utils.c
+   
+   Utility functions used by the SlugWx weather monitor.  Mostly routines to dump 
+   various data structures for debug or status reporting.
 
-     This module also contains a generic routine that checks to see if a weather data field
-     timestamp is present (ie - there's data in the field, not just 0's)
+   This module also contains a generic routine that checks to see if a weather data field
+   timestamp is present (ie - there's data in the field, not just 0's)
 
+   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS
+   OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+   AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT HOLDERS
+   OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+   CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+   ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+   OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF OR INABILITY TO USE THIS SOFTWARE, EVEN IF
+   THE COPYRIGHT HOLDERS OR CONTRIBUTORS ARE AWARE OF THE POSSIBILITY OF SUCH DAMAGE.
+   
 ========================================================================*/
 
 #include <stdlib.h>
@@ -30,81 +40,81 @@ static void printTimeDateAndUptime(FILE *fd);
 // command mode when used to produce output for the embedded web pages
 //--------------------------------------------------------------------------------------------------------------------------------------------
 void WX_DumpInfo(FILE *fd) { 
-  int sensorIdx;
+   int sensorIdx;
   
    printTimeDateAndUptime(fd);
    
    // --------------------------- Outdoor Unit info ---------------------------------------------------
-	if (isTimestampPresent(&wxData.odu.Timestamp))  {
-		if (WxConfig.oduNameString[0] != 0)
-		   fprintf(fd, "   %s (ODU)  Temp: ",WxConfig.oduNameString);
-		else
-		   fprintf(fd, "   Outdoor Temp: ");
-		fprintf(fd, "%5.1f  Relative Humidity: %d%%  Dewpoint: ",
-		         wxData.odu.Temp*1.8 + 32, wxData.odu.RelHum);
-		fprintf(fd,"%2.1f ",wxData.odu.Dewpoint*1.8+32);
-		if (wxData.odu.BatteryLow == TRUE)
-			fprintf(fd, "(**Low Sensor Battery)");
-		fprintf(fd,"\n\n"); 
-	}
+   if (isTimestampPresent(&wxData.odu.Timestamp))  {
+      if (WxConfig.oduNameString[0] != 0)
+         fprintf(fd, "   %s (ODU)  Temp: ",WxConfig.oduNameString);
+      else
+         fprintf(fd, "   Outdoor Temp: ");
+      fprintf(fd, "%5.1f  Relative Humidity: %d%%  Dewpoint: ",
+               wxData.odu.Temp*1.8 + 32, wxData.odu.RelHum);
+      fprintf(fd,"%2.1f ",wxData.odu.Dewpoint*1.8+32);
+      if (wxData.odu.BatteryLow == TRUE)
+      fprintf(fd, "(**Low Sensor Battery)");
+      fprintf(fd,"\n\n"); 
+   }
 
-  // --------------------------- Extra Sensor info ---------------------------------------------------
-	for (sensorIdx=0;sensorIdx<=MAX_SENSOR_CHANNEL_INDEX;sensorIdx++) {
-		if (isTimestampPresent(&wxData.ext[sensorIdx].Timestamp)) {
-		  char label[80];
-		  if (WxConfig.extNameStrings[sensorIdx][0] != 0)
-		     fprintf(fd, "   %s (Ch%2d) ",WxConfig.extNameStrings[sensorIdx], sensorIdx+1);
-		  else 
-		     fprintf(fd, "   Extra Sensor%2d ", sensorIdx+1);
-		  fprintf(fd, "Temp: %5.1f  Relative Humidity: %d%%  Dewpoint: ",
-		         wxData.ext[sensorIdx].Temp*1.8 + 32, wxData.ext[sensorIdx].RelHum);
-		  fprintf(fd,"%2.1f ",wxData.ext[sensorIdx].Dewpoint*1.8+32);
-		  if (wxData.ext[sensorIdx].BatteryLow == TRUE)
-			  fprintf(fd, "(** Sensor Battery Low)");
-		  fprintf(fd,"\n");	
-	  }
-	}
-  // --------------------------- Indoor Unit info ---------------------------------------------------
-	if (isTimestampPresent(&wxData.idu.Timestamp))  {
-	    if (WxConfig.iduNameString[0] != 0)
-		   fprintf(fd, "\n   %s (IDU)  Temp: ",WxConfig.iduNameString);
-		else
-		   fprintf(fd, "\n   Indoor  Temp: ");
-		fprintf(fd, "%5.1f  Relative Humidity: %d%%  Dewpoint: ",
-		         wxData.idu.Temp*1.8 + 32, wxData.idu.RelHum);
-		fprintf(fd,"%2.1f ",wxData.idu.Dewpoint*1.8+32);
-		if (wxData.idu.BatteryLow == TRUE)
-			fprintf(fd, "(** Low Sensor Battery)");
-		fprintf(fd,"\n");
+   // --------------------------- Extra Sensor info ---------------------------------------------------
+   for (sensorIdx=0;sensorIdx<=MAX_SENSOR_CHANNEL_INDEX;sensorIdx++) {
+      if (isTimestampPresent(&wxData.ext[sensorIdx].Timestamp)) {
+         char label[80];
+         if (WxConfig.extNameStrings[sensorIdx][0] != 0)
+            fprintf(fd, "   %s (Ch%2d) ",WxConfig.extNameStrings[sensorIdx], sensorIdx+1);
+         else 
+            fprintf(fd, "   Extra Sensor%2d ", sensorIdx+1);
+            fprintf(fd, "Temp: %5.1f  Relative Humidity: %d%%  Dewpoint: ",
+               wxData.ext[sensorIdx].Temp*1.8 + 32, wxData.ext[sensorIdx].RelHum);
+            fprintf(fd,"%2.1f ",wxData.ext[sensorIdx].Dewpoint*1.8+32);
+         if (wxData.ext[sensorIdx].BatteryLow == TRUE)
+            fprintf(fd, "(** Sensor Battery Low)");
+            fprintf(fd,"\n");
+      }
+   }
+   // --------------------------- Indoor Unit info ---------------------------------------------------
+   if (isTimestampPresent(&wxData.idu.Timestamp))  {
+      if (WxConfig.iduNameString[0] != 0)
+         fprintf(fd, "\n   %s (IDU)  Temp: ",WxConfig.iduNameString);
+      else
+         fprintf(fd, "\n   Indoor  Temp: ");
+      fprintf(fd, "%5.1f  Relative Humidity: %d%%  Dewpoint: ",
+               wxData.idu.Temp*1.8 + 32, wxData.idu.RelHum);
+      fprintf(fd,"%2.1f ",wxData.idu.Dewpoint*1.8+32);
+      if (wxData.idu.BatteryLow == TRUE)
+         fprintf(fd, "(** Low Sensor Battery)");
+      fprintf(fd,"\n");
 
-	    if (WxConfig.iduNameString[0] != 0)
-		   fprintf(fd, "   %s (IDU)  Pressure: ",WxConfig.iduNameString);
-		else
-		   fprintf(fd, "   Indoor  Pressure: ");		
-		fprintf(fd, "%d mbar   Sealevel: %d  Forecast: %s\n",
-		              wxData.idu.Pressure, wxData.idu.Pressure+wxData.idu.SeaLevelOffset, wxData.idu.ForecastStr);
-	}
-	
-  fprintf(fd, "\n");
-  // --------------------------- Wind Gauge info ---------------------------------------------------
-	if (isTimestampPresent(&wxData.wg.Timestamp)) {
-		fprintf(fd, "   Wind Speed: %4.1f  Avg Speed: %4.1f  Direction: %d",
-		         wxData.wg.Speed, wxData.wg.AvgSpeed, wxData.wg.Bearing);
-		if (wxData.wg.ChillValid)
-			fprintf(fd," Wind Chill: %2.0f ",wxData.wg.WindChill*1.8+32);
-		else 
-		  fprintf(fd," Wind Chill: --\n");
-		if (wxData.wg.BatteryLow == TRUE)
-			fprintf(fd, "(**Low Sensor Battery)");
-		fprintf(fd,"\n");	;
-	}
-  // --------------------------- Rain Gauge info ---------------------------------------------------
-	if (isTimestampPresent(&wxData.rg.Timestamp)) {
-		fprintf(fd, "   Rainfall: %dmm/hr  Total Rainfall: %dmm ", wxData.rg.Rate, wxData.rg.Total);
-		if (wxData.wg.BatteryLow == TRUE)
-			fprintf(fd, "(**Low Sensor Battery)");
-		fprintf(fd,"\n");	
-	}
+      if (WxConfig.iduNameString[0] != 0)
+         fprintf(fd, "   %s (IDU)  Pressure: ",WxConfig.iduNameString);
+      else
+         fprintf(fd, "   Indoor  Pressure: ");      
+      fprintf(fd, "%d mbar   Sealevel: %d  Forecast: %s\n",
+                    wxData.idu.Pressure, wxData.idu.Pressure+wxData.idu.SeaLevelOffset, wxData.idu.ForecastStr);
+   }
+   
+   fprintf(fd, "\n");
+   // --------------------------- Wind Gauge info ---------------------------------------------------
+   if (isTimestampPresent(&wxData.wg.Timestamp)) {
+      fprintf(fd, "   Wind Speed: %4.1f  Avg Speed: %4.1f  Direction: %d",
+               wxData.wg.Speed, wxData.wg.AvgSpeed, wxData.wg.Bearing);
+      if (wxData.wg.ChillValid)
+         fprintf(fd," Wind Chill: %2.0f ",wxData.wg.WindChill*1.8+32);
+      else 
+         fprintf(fd," Wind Chill: --\n");
+      if (wxData.wg.BatteryLow == TRUE)
+         fprintf(fd, "(**Low Sensor Battery)");
+      fprintf(fd,"\n");   ;
+   }
+   // --------------------------- Rain Gauge info ---------------------------------------------------
+   if (isTimestampPresent(&wxData.rg.Timestamp)) {
+      fprintf(fd, "   Rainfall: %dmm/hr  Total Rainfall: %dmm ", wxData.rg.Rate, wxData.rg.Total);
+      if (wxData.wg.BatteryLow == TRUE)
+         fprintf(fd, "(**Low Sensor Battery)");
+      fprintf(fd,"\n");   
+   }
   fprintf(fd,"\n");
 }
 
@@ -129,7 +139,6 @@ void WX_DumpMaxMinInfo(FILE *fd)
   printTimeDateAndUptime(fd);
    
   fprintf(fd,"                   Min           Time                  Max            Time\n\n");
-
          
   if (WxConfig.iduNameString[0] != 0)
       sprintf(label, "\n   %s (IDU)\n     Temperature",WxConfig.iduNameString);
@@ -161,10 +170,10 @@ void WX_DumpMaxMinInfo(FILE *fd)
                   minDatap->odu.RelHum, &minDatap->odu.RelHumTimestamp);
 
   for(i=0;i<=MAX_SENSOR_CHANNEL_INDEX;i++) {
-		if (WxConfig.extNameStrings[i][0] != 0)
-		  sprintf(label, "\n   %s (Ch %d)\n     Temperature",WxConfig.extNameStrings[i], i+1);
-		else
-		  sprintf(label, "\n   Extra Sensor (Ch %d)\n     Temperature", i+1);
+      if (WxConfig.extNameStrings[i][0] != 0)
+        sprintf(label, "\n   %s (Ch %d)\n     Temperature",WxConfig.extNameStrings[i], i+1);
+      else
+        sprintf(label, "\n   Extra Sensor (Ch %d)\n     Temperature", i+1);
       printMaxMinTemp(fd, label,
                   maxDatap->ext[i].Temp, &maxDatap->ext[i].TempTimestamp, 
                   minDatap->ext[i].Temp, &minDatap->ext[i].TempTimestamp);
@@ -269,7 +278,7 @@ void printMaxMinWindSpeed(FILE *fd,char *label,float maxSpeed,WX_Timestamp *maxT
 void printTimestamp(FILE *fd, WX_Timestamp *ts) {
   struct tm *localtm = localtime(&ts->timet);
   fprintf(fd, "Date: %02d/%02d/%04d Time: %02d:%02d",
-      localtm->tm_mon+1, localtm->tm_mday, localtm->tm_year+1900, localtm->tm_hour, localtm->tm_min);	   
+      localtm->tm_mon+1, localtm->tm_mday, localtm->tm_year+1900, localtm->tm_hour, localtm->tm_min);      
 }
 
 static void printSensorStatus(FILE *fd,char *str, int lock_code, int lock_code_change_count, int data_timeout_count, WX_Timestamp *ts);
@@ -289,30 +298,30 @@ void WX_DumpSensorInfo(FILE *fd)
    fprintf(fd,"\n                   Lock   Lock  Code\n");
      fprintf(fd,"   Sensor Name     Code   Mismatches   Timeouts   Last Valid Message Received\n\n");
 
-	char label[80];
+   char label[80];
    if (WxConfig.oduNameString[0] != 0)
-		sprintf(label,"   %s (ODU) ",WxConfig.oduNameString);
+      sprintf(label,"   %s (ODU) ",WxConfig.oduNameString);
    else
       sprintf(label,"   Outdoor Unit  ");
-	printSensorStatus(fd, label, wxData.odu.LockCode, wxData.odu.LockCodeMismatchCount, 
-	          wxData.odu.DataTimeoutCount, &wxData.odu.Timestamp);
-	
+   printSensorStatus(fd, label, wxData.odu.LockCode, wxData.odu.LockCodeMismatchCount, 
+             wxData.odu.DataTimeoutCount, &wxData.odu.Timestamp);
+   
    if (WxConfig.iduNameString[0] != 0)
-		sprintf(label,"   %s (IDU) ",WxConfig.iduNameString);
+      sprintf(label,"   %s (IDU) ",WxConfig.iduNameString);
    else
       sprintf(label,"   Indoor Unit   ");
-	printSensorStatus(fd,label, wxData.idu.LockCode, wxData.idu.LockCodeMismatchCount, 
-	          wxData.idu.DataTimeoutCount, &wxData.idu.Timestamp);
-	
-	int sensorIdx;
-	for (sensorIdx=0;sensorIdx<=MAX_SENSOR_CHANNEL_INDEX;sensorIdx++)
-	  printExtraSensorStatus(fd, sensorIdx);
+   printSensorStatus(fd,label, wxData.idu.LockCode, wxData.idu.LockCodeMismatchCount, 
+             wxData.idu.DataTimeoutCount, &wxData.idu.Timestamp);
+   
+   int sensorIdx;
+   for (sensorIdx=0;sensorIdx<=MAX_SENSOR_CHANNEL_INDEX;sensorIdx++)
+      printExtraSensorStatus(fd, sensorIdx);
         
    printSensorStatus(fd,"   Wind Gauge    ", wxData.wg.LockCode,  wxData.wg.LockCodeMismatchCount,  
           wxData.wg.DataTimeoutCount, &wxData.wg.Timestamp);
-	printSensorStatus(fd,"   Rain Gauge    ", wxData.rg.LockCode,  wxData.rg.LockCodeMismatchCount,  
-	       wxData.rg.DataTimeoutCount, &wxData.rg.Timestamp);
-	  
+   printSensorStatus(fd,"   Rain Gauge    ", wxData.rg.LockCode,  wxData.rg.LockCodeMismatchCount,  
+          wxData.rg.DataTimeoutCount, &wxData.rg.Timestamp);
+     
    if (WxConfig.sensorLockingEnabled)
      fprintf(fd, "\n   Sensor Locking is ENABLED (edit rtl-wx.conf to change)\n\n");
    else
@@ -323,23 +332,22 @@ void printSensorStatus(FILE *fd,char *str, int lock_code, int lock_code_change_c
 {
   if (ts->PktCnt != 0) {
     fprintf(fd,"%s  ", str);
-	if (lock_code == -1)
-	  fprintf(fd,"                               ");
-	else
-	  fprintf(fd,"0x%02x      %3d          %2d      ", lock_code, lock_code_change_count, data_timeout_count);
+   if (lock_code == -1)
+      fprintf(fd,"                               ");
+   else
+      fprintf(fd,"0x%02x      %3d          %2d      ", lock_code, lock_code_change_count, data_timeout_count);
  
-     
    struct tm *localtm = localtime(&ts->timet);
    fprintf(fd, "%02d/%02d/%04d at %02d:%02d:%02d",
-      localtm->tm_mon+1, localtm->tm_mday, localtm->tm_year+1900, localtm->tm_hour, localtm->tm_min, localtm->tm_sec);	   
-	fprintf(fd," (Msg# %d)\n", ts->PktCnt);
+      localtm->tm_mon+1, localtm->tm_mday, localtm->tm_year+1900, localtm->tm_hour, localtm->tm_min, localtm->tm_sec);      
+   fprintf(fd," (Msg# %d)\n", ts->PktCnt);
    }
 }
 
 void printExtraSensorStatus(FILE *fd, int sensorIdx) {
   char label[80];
   if (WxConfig.extNameStrings[sensorIdx][0] != 0)
-		sprintf(label,"   %s (Ch%2d)",WxConfig.extNameStrings[sensorIdx], sensorIdx+1);
+      sprintf(label,"   %s (Ch%2d)",WxConfig.extNameStrings[sensorIdx], sensorIdx+1);
   else
       sprintf(label,"   Ext Sensor %2d ", sensorIdx+1);
   printSensorStatus(fd,label, wxData.ext[sensorIdx].LockCode, wxData.ext[sensorIdx].LockCodeMismatchCount, 
@@ -348,48 +356,49 @@ void printExtraSensorStatus(FILE *fd, int sensorIdx) {
 
 void WX_DumpConfigInfo(FILE *fd)
 {
-int i;
-char passwdStr[20];
+ int i;
+ char passwdStr[20];
  int configFileReadFrequency;
 
-fprintf(fd, "    sensorLockingEnabled: %d\n",WxConfig.sensorLockingEnabled);
-fprintf(fd, "          altitudeInFeet: %d\n",WxConfig.altitudeInFeet);
-fprintf(fd, " configFileReadFrequency: %d\n",WxConfig.configFileReadFrequency);
-fprintf(fd, "   dataSnapshotFrequency: %d\n",WxConfig.dataSnapshotFrequency);
-fprintf(fd, " webcamSnapshotFrequency: %d\n\n",WxConfig.webcamSnapshotFrequency);
-fprintf(fd, "   tagFileParseFrequency: %d\n",WxConfig.tagFileParseFrequency);
-fprintf(fd, "      NumTagFilesToParse: %d\n",WxConfig.NumTagFilesToParse);
-for (i=0;i<WxConfig.NumTagFilesToParse;i++)
-  fprintf(fd, "                    %-15s -> %s\n",WxConfig.tagFiles[i].inFile, WxConfig.tagFiles[i].outFile);
-fprintf(fd, "\n");
-fprintf(fd, "      ftpUploadFrequency: %d\n",WxConfig.ftpUploadFrequency);
-fprintf(fd, "       ftpServerHostname: %s\n",WxConfig.ftpServerHostname);
-fprintf(fd, "       ftpServerUsername: %s\n",WxConfig.ftpServerUsername);
-strncpy(passwdStr, WxConfig.ftpServerPassword,20);
-passwdStr[20]=0;
-for (i=2;i<(int) strlen(passwdStr);i++)
-   passwdStr[i] = '*';
-fprintf(fd, "       ftpServerPassword: %s\n", passwdStr);
-fprintf(fd, "           numFilesToFtp: %d\n",WxConfig.numFilesToFtp);
-for (i=0;i<WxConfig.numFilesToFtp;i++) 
-  fprintf(fd, "                    %-15s -> %s\n",WxConfig.ftpFiles[i].filename, WxConfig.ftpFiles[i].destpath);
-fprintf(fd, "\n");
-/*
-fprintf(fd, "      mailSendFrequency: %d\n",WxConfig.mailSendFrequency);
-fprintf(fd, "     mailServerHostname: %s\n",WxConfig.mailServerHostname);
-fprintf(fd, "     mailServerUsername: %s\n",WxConfig.mailServerUsername);
-fprintf(fd, "     mailServerPassword: %s\n",WxConfig.mailServerPassword);
-fprintf(fd, "      numMailMsgsToSend: %d\n",WxConfig.numMailMsgsToSend);
-for (i=0;i<WxConfig.numMailMsgsToSend;i++)
-  fprintf(fd, "                         --%s-%s-%s--\n",WxConfig.mailMsgList[i].subject, WxConfig.mailMsgList[i].recipients, WxConfig.mailMsgList[i].bodyFilename);
-fprintf(fd, "\n");
-*/
+ fprintf(fd, "    sensorLockingEnabled: %d\n",WxConfig.sensorLockingEnabled);
+ fprintf(fd, "          altitudeInFeet: %d\n",WxConfig.altitudeInFeet);
+ fprintf(fd, " configFileReadFrequency: %d\n",WxConfig.configFileReadFrequency);
+ fprintf(fd, "   dataSnapshotFrequency: %d\n",WxConfig.dataSnapshotFrequency);
+ fprintf(fd, " webcamSnapshotFrequency: %d\n\n",WxConfig.webcamSnapshotFrequency);
+ fprintf(fd, "   tagFileParseFrequency: %d\n",WxConfig.tagFileParseFrequency);
+ fprintf(fd, "      NumTagFilesToParse: %d\n",WxConfig.NumTagFilesToParse);
+ for (i=0;i<WxConfig.NumTagFilesToParse;i++)
+    fprintf(fd, "                    %-15s -> %s\n",WxConfig.tagFiles[i].inFile, WxConfig.tagFiles[i].outFile);
+ fprintf(fd, "\n");
+ fprintf(fd, "      ftpUploadFrequency: %d\n",WxConfig.ftpUploadFrequency);
+ fprintf(fd, "       ftpServerHostname: %s\n",WxConfig.ftpServerHostname);
+ fprintf(fd, "       ftpServerUsername: %s\n",WxConfig.ftpServerUsername);
+ strncpy(passwdStr, WxConfig.ftpServerPassword,20);
+ passwdStr[20]=0;
+ for (i=2;i<(int) strlen(passwdStr);i++)
+    passwdStr[i] = '*';
+ fprintf(fd, "       ftpServerPassword: %s\n", passwdStr);
+ fprintf(fd, "           numFilesToFtp: %d\n",WxConfig.numFilesToFtp);
+ for (i=0;i<WxConfig.numFilesToFtp;i++) 
+    fprintf(fd, "                    %-15s -> %s\n",WxConfig.ftpFiles[i].filename, WxConfig.ftpFiles[i].destpath);
+ fprintf(fd, "\n");
+ /*
+ fprintf(fd, "      mailSendFrequency: %d\n",WxConfig.mailSendFrequency);
+ fprintf(fd, "     mailServerHostname: %s\n",WxConfig.mailServerHostname);
+ fprintf(fd, "     mailServerUsername: %s\n",WxConfig.mailServerUsername);
+ fprintf(fd, "     mailServerPassword: %s\n",WxConfig.mailServerPassword);
+ fprintf(fd, "      numMailMsgsToSend: %d\n",WxConfig.numMailMsgsToSend);
+ for (i=0;i<WxConfig.numMailMsgsToSend;i++)
+    fprintf(fd, "                         --%s-%s-%s--\n",WxConfig.mailMsgList[i].subject, 
+                                       WxConfig.mailMsgList[i].recipients, WxConfig.mailMsgList[i].bodyFilename);
+ fprintf(fd, "\n");
+ */
 }
 
 void printTimeDateAndUptime(FILE *fd) {
-  struct tm *localtm = localtime(&wxData.currentTime.timet);
-  fprintf(fd, "   Date: %02d/%02d/%04d    Time: %02d:%02d:%02d",
-      localtm->tm_mon+1, localtm->tm_mday, localtm->tm_year+1900, localtm->tm_hour, localtm->tm_min, localtm->tm_sec);	
+   struct tm *localtm = localtime(&wxData.currentTime.timet);
+   fprintf(fd, "   Date: %02d/%02d/%04d    Time: %02d:%02d:%02d",
+      localtm->tm_mon+1, localtm->tm_mday, localtm->tm_year+1900, localtm->tm_hour, localtm->tm_min, localtm->tm_sec);   
 
    time_t timeNow;
    time(&timeNow);
@@ -413,7 +422,7 @@ void printTimeDateAndUptime(FILE *fd) {
 BOOL isTimestampPresent(WX_Timestamp *ts) {
   BOOL retVal=1;
   if (ts->PktCnt == 0) // If pkt count is non-zero - data has been stored
-		retVal=0;
+      retVal=0;
   return(retVal);
 }
 
