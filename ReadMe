@@ -1,6 +1,13 @@
-RTL-Wx collects Oregon Scientific 433Mhz wireless weather sensor data using a low cost USB RTL-SDR dongle.  The project is ready to run with a compatible Raspberry Pi or Netgear R7000 setup. 
+RTL-Wx collects Oregon Scientific 433Mhz wireless weather sensor data using a low cost USB RTL-SDR dongle.  The project is ready to run with a compatible Raspberry Pi or Netgear R7000 setup.  
 
 To install the software, please see the appropriate hardware specific instructions in rtl-wx/doc. 
+
+This project includes some code from the rtl_433 project (from rtl_433.c with heavy mods):
+ - https://github.com/merbanan/rtl_433
+   
+It depends on the following projects:
+ - libusb-1.0 (http://libusb.info/) is linked as a shared dynamic library
+ - librtlsdr (https://github.com/steve-m/librtlsdr/releases) is linked as a static library
 
 Tested Hardware setups
 1) Raspberry Pi
