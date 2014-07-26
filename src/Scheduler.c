@@ -14,7 +14,7 @@
       Finally, there's some magic in these routines to attempt to align the timing so periodic processing happens at
       even multiples of the frequency (ie. events occurring every 15 mins happen at xx:00, xx:15, xx:30, xx:45.  
       The logic for this is a bit squirrely but it seems to work ok.
-
+      
 ========================================================================*/
 
 #include <string.h>
@@ -30,6 +30,7 @@ static time_t lastRainDataSnapshotTime;
 static time_t lastWebcamSnapshotTime;
 static time_t lastTagProcTime;
 static time_t lastFtpUploadTime;
+static time_t lastTimeoutCheckTime;
 
 static unsigned int configProcCnt;
 static unsigned int dataSnapshotCnt;
@@ -38,13 +39,12 @@ static unsigned int webcamSnapshotCnt;
 static unsigned int tagProcCnt;
 static unsigned int ftpUploadCnt;
 
-static unsigned int PktCntAtLastTimeUpdate;
-
 static WX_Data *wxDatap;
 static WX_ConfigSettings *configVarp;
 
 static unsigned int getMinutesToWait(unsigned int frequency, time_t currentTime, 
                                                            time_t timeLastDone);
+static void checkForSensorTimeouts();
 static void updateCurrentTime(WX_Data *weatherDatap);
 
 #define SECS_PER_MIN 60
@@ -56,8 +56,6 @@ void WX_InitActionScheduler(WX_Data *weatherDatap, WX_ConfigSettings *configurat
 {
   wxDatap = weatherDatap;
   configVarp = configurationVarp;
-   
-  PktCntAtLastTimeUpdate = -1; 
 
   updateCurrentTime(wxDatap);
 
@@ -67,6 +65,7 @@ void WX_InitActionScheduler(WX_Data *weatherDatap, WX_ConfigSettings *configurat
   lastWebcamSnapshotTime = time(NULL);
   lastTagProcTime = time(NULL);
   lastFtpUploadTime = time(NULL);
+  lastTimeoutCheckTime = time(NULL);
 
   configProcCnt = 0;
   dataSnapshotCnt = 0;
@@ -85,10 +84,12 @@ void WX_DoScheduledActions()
   int i;
 
   updateCurrentTime(wxDatap);
-
+  if (getMinutesToWait(1, time(NULL), lastTimeoutCheckTime) == 0)
+     checkForSensorTimeouts();
+  
   // First reread configuration file if more than xx minutes has elapsed since last read
   if (getMinutesToWait(configVarp->configFileReadFrequency, time(NULL), lastConfProcTime) == 0) {
-//DPRINTF("Reading SlugWx.conf at %s", asctime(localtime(&lastConfProcTime)));
+//DPRINTF("Reading rtl-wx.conf at %s", asctime(localtime(&lastConfProcTime)));
     WX_DoConfigFileRead();
   }
 
@@ -135,6 +136,33 @@ void WX_DoScheduledActions()
   WX_DoFtpUpload();
 //printf("done.\n");fflush(stdout);
   }
+}
+
+int checkSensorForTimeout(WX_Timestamp *ts) {
+  long secondsSinceLastMessage = difftime(wxDatap->currentTime.timet, ts->timet);
+  
+  if ((ts->PktCnt > 0) && (secondsSinceLastMessage > 240))
+     return 1;
+  else
+     return 0;
+}
+
+void checkForSensorTimeouts() {
+
+  lastTimeoutCheckTime = time(NULL);
+  if (checkSensorForTimeout(&wxDatap->idu.Timestamp))
+    wxDatap->idu.DataTimeoutCount++;
+  if (checkSensorForTimeout(&wxDatap->odu.Timestamp))
+    wxDatap->odu.DataTimeoutCount++;  
+  if (checkSensorForTimeout(&wxDatap->rg.Timestamp))
+    wxDatap->rg.DataTimeoutCount++;
+  if (checkSensorForTimeout(&wxDatap->wg.Timestamp))
+    wxDatap->wg.DataTimeoutCount++;
+    
+  	int sensorIdx;
+	for (sensorIdx=0;sensorIdx<=MAX_SENSOR_CHANNEL_INDEX;sensorIdx++)
+	  if (checkSensorForTimeout(&wxDatap->ext[sensorIdx].Timestamp))
+	    wxDatap->ext[sensorIdx].DataTimeoutCount++;
 }
 
 void WX_DoConfigFileRead()
@@ -230,25 +258,9 @@ int WX_DoFtpUpload(void)
 	return(retVal);
 }
 
-void updateCurrentTime(WX_Data *weatherDatap)
-{
-  time_t timeNow = time(NULL);
-  struct tm *localtimep = localtime(&timeNow);
-
-  // Update the time only if at least 1 weather station packet has arrived since the last update.
-  if (weatherDatap->currentTime.PktCnt != PktCntAtLastTimeUpdate) {
-	weatherDatap->currentTime.Minute = localtimep->tm_min;
-	weatherDatap->currentTime.Hour = localtimep->tm_hour;
-	weatherDatap->currentTime.Day = localtimep->tm_mday;
-	weatherDatap->currentTime.Month = localtimep->tm_mon+1;
-	weatherDatap->currentTime.Year = localtimep->tm_year+1900;
-	PktCntAtLastTimeUpdate = weatherDatap->currentTime.PktCnt;
-	// Also need to fake out places in code that check if timestamp has come in from weather station yet
-	if (weatherDatap->currentTime.PktCnt == 0) {
-	   weatherDatap->currentTime.PktCnt = 1;
-	   weatherDatap->currentTime.ClockTickCnt = 1;
-	}
-  }
+void updateCurrentTime(WX_Data *weatherDatap) {
+   time_t timeNow = time(NULL);
+	weatherDatap->currentTime.timet = timeNow;
 }
 
 // Determine the remaining wait time before an action should be done.  This routine tries to sync up occurances so they fall on the

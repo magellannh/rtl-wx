@@ -22,7 +22,7 @@
 
 #include "rtl-wx.h"
 
-static char *getUptimeString();
+static void printTimeDateAndUptime(FILE *fd);
 
 //--------------------------------------------------------------------------------------------------------------------------------------------
 // Dump the current weather station data to the file specified in a human readable format.  This is called based on
@@ -32,12 +32,7 @@ static char *getUptimeString();
 void WX_DumpInfo(FILE *fd) { 
   int sensorIdx;
   
-   // --------------------------- Current Time and date info ---------------------------------------------------
-   fprintf(fd,"   Date: %02d/%02d/%04d    Time: %02d:%02d", 
-      wxData.currentTime.Month, wxData.currentTime.Day, wxData.currentTime.Year,
-		wxData.currentTime.Hour,wxData.currentTime.Minute);	   
-   fprintf(fd, "    %s\n\n", getUptimeString());
-
+   printTimeDateAndUptime(fd);
    
    // --------------------------- Outdoor Unit info ---------------------------------------------------
 	if (isTimestampPresent(&wxData.odu.Timestamp))  {
@@ -106,40 +101,11 @@ void WX_DumpInfo(FILE *fd) {
   // --------------------------- Rain Gauge info ---------------------------------------------------
 	if (isTimestampPresent(&wxData.rg.Timestamp)) {
 		fprintf(fd, "   Rainfall: %dmm/hr  Total Rainfall: %dmm ", wxData.rg.Rate, wxData.rg.Total);
-		if (wxData.rg.TotalYesterday != -1)
-		   fprintf(fd, " Yesterday: %dmm ", wxData.rg.TotalYesterday);
-		if ((wxData.rg.LastReset.Month != 0) && (wxData.rg.LastReset.Day != 0))
-		   fprintf(fd, " Since: %02d-%02d-%04d %02d:%02d ", 
-						 wxData.rg.LastReset.Month, wxData.rg.LastReset.Day, wxData.rg.LastReset.Year,
-						 wxData.rg.LastReset.Hour, wxData.rg.LastReset.Minute);
 		if (wxData.wg.BatteryLow == TRUE)
 			fprintf(fd, "(**Low Sensor Battery)");
 		fprintf(fd,"\n");	
 	}
   fprintf(fd,"\n");
-}
-
-char *getUptimeString() {       
-   
-   time_t timeNow;
-   time(&timeNow);
-   long int seconds = difftime(timeNow, WX_programStartTime);
-      
-   int days = seconds / (60*60*24);
-   seconds = seconds % (60*60*24);
-   
-   int hours = seconds / (60*60);
-   seconds = seconds % (60*60);
-   
-   int minutes = seconds / 60;
-   seconds = seconds % 60;
-   
-   if (days > 0)
-     sprintf(WX_uptimeString,"Uptime: %d days, %d hours, %d Minutes", days, hours, minutes);
-   else
-     sprintf(WX_uptimeString,"Uptime: %d hours, %d Minutes", hours, minutes);
-   
-   return WX_uptimeString;
 }
 
 static void printMaxMinTemp(FILE *fd, char *label,float maxTemp, WX_Timestamp *maxTs, float minTemp, WX_Timestamp *minTs);
@@ -159,9 +125,12 @@ void WX_DumpMaxMinInfo(FILE *fd)
   WX_Data *maxDatap = WX_GetMaxDataRecord();
   WX_Data *minDatap = WX_GetMinDataRecord();
   char label[100];
+   
+  printTimeDateAndUptime(fd);
+   
+  fprintf(fd,"                   Min           Time                  Max            Time\n\n");
 
-  fprintf(fd,"                   Min        Time          Max        Time\n\n");
- 
+         
   if (WxConfig.iduNameString[0] != 0)
       sprintf(label, "\n   %s (IDU)\n     Temperature",WxConfig.iduNameString);
   else
@@ -297,23 +266,18 @@ void printMaxMinWindSpeed(FILE *fd,char *label,float maxSpeed,WX_Timestamp *maxT
     fprintf(fd, "\n");
   }
 }
-void printTimestamp(FILE *fd, WX_Timestamp *ts)
-{
-  if (ts->Year != 0)
-     fprintf(fd,"%02d/%02d/%04d %02d:%02d",
-	                     ts->Month, ts->Day, ts->Year, ts->Hour, ts->Minute);
-  else
-     fprintf(fd,"--/--/---- --:%02d", ts->Minute);
+void printTimestamp(FILE *fd, WX_Timestamp *ts) {
+  struct tm *localtm = localtime(&ts->timet);
+  fprintf(fd, "Date: %02d/%02d/%04d Time: %02d:%02d",
+      localtm->tm_mon+1, localtm->tm_mday, localtm->tm_year+1900, localtm->tm_hour, localtm->tm_min);	   
 }
 
-static void printSensorStatus(FILE *fd,char *str, int lock_code, int lock_code_change_count, WX_Timestamp *ts);
+static void printSensorStatus(FILE *fd,char *str, int lock_code, int lock_code_change_count, int data_timeout_count, WX_Timestamp *ts);
 static void printExtraSensorStatus(FILE *fd, int sensorIdx);
 
 void WX_DumpSensorInfo(FILE *fd)
 { 
-   fprintf(fd,"   Date: %02d/%02d/%04d    Time: %02d:%02d",
-		  wxData.currentTime.Month, wxData.currentTime.Day, wxData.currentTime.Year,wxData.currentTime.Hour, wxData.currentTime.Minute);	   
-   fprintf(fd, "    %s\n\n", getUptimeString());
+   printTimeDateAndUptime(fd);
 
    fprintf(fd, "   Messages Processed: %d     Messages With Errors: %d\n",wxData.currentTime.PktCnt, wxData.BadPktCnt);
 
@@ -321,30 +285,33 @@ void WX_DumpSensorInfo(FILE *fd)
      fprintf(fd, "   Resyncs: %d\n",wxData.ResyncCnt);
    if (wxData.UnsupportedPktCnt > 0)
      fprintf(fd, "   Unsupported Packets: %d\n",wxData.UnsupportedPktCnt);
-   if (wxData.dataTimeoutCnt > 0)
-     fprintf(fd, "   Weather Data Timeouts: %d\n",wxData.dataTimeoutCnt);
-  
-   fprintf(fd,"\n   Sensor Name    Lock Code  Code Mismatches   Time Last Valid Message Received\n\n");
-	
+              
+   fprintf(fd,"\n                   Lock   Lock  Code\n");
+     fprintf(fd,"   Sensor Name     Code   Mismatches   Timeouts   Last Valid Message Received\n\n");
+
 	char label[80];
    if (WxConfig.oduNameString[0] != 0)
 		sprintf(label,"   %s (ODU) ",WxConfig.oduNameString);
    else
       sprintf(label,"   Outdoor Unit  ");
-	printSensorStatus(fd, label, wxData.odu.LockCode, wxData.odu.LockCodeMismatchCount, &wxData.odu.Timestamp);
+	printSensorStatus(fd, label, wxData.odu.LockCode, wxData.odu.LockCodeMismatchCount, 
+	          wxData.odu.DataTimeoutCount, &wxData.odu.Timestamp);
 	
    if (WxConfig.iduNameString[0] != 0)
 		sprintf(label,"   %s (IDU) ",WxConfig.iduNameString);
    else
       sprintf(label,"   Indoor Unit   ");
-	printSensorStatus(fd,label, wxData.idu.LockCode, wxData.idu.LockCodeMismatchCount, &wxData.idu.Timestamp);
+	printSensorStatus(fd,label, wxData.idu.LockCode, wxData.idu.LockCodeMismatchCount, 
+	          wxData.idu.DataTimeoutCount, &wxData.idu.Timestamp);
 	
 	int sensorIdx;
 	for (sensorIdx=0;sensorIdx<=MAX_SENSOR_CHANNEL_INDEX;sensorIdx++)
 	  printExtraSensorStatus(fd, sensorIdx);
         
-   printSensorStatus(fd,"   Wind Gauge    ", wxData.wg.LockCode,  wxData.wg.LockCodeMismatchCount,  &wxData.wg.Timestamp);
-	printSensorStatus(fd,"   Rain Gauge    ", wxData.rg.LockCode,  wxData.rg.LockCodeMismatchCount,  &wxData.rg.Timestamp);
+   printSensorStatus(fd,"   Wind Gauge    ", wxData.wg.LockCode,  wxData.wg.LockCodeMismatchCount,  
+          wxData.wg.DataTimeoutCount, &wxData.wg.Timestamp);
+	printSensorStatus(fd,"   Rain Gauge    ", wxData.rg.LockCode,  wxData.rg.LockCodeMismatchCount,  
+	       wxData.rg.DataTimeoutCount, &wxData.rg.Timestamp);
 	  
    if (WxConfig.sensorLockingEnabled)
      fprintf(fd, "\n   Sensor Locking is ENABLED (edit rtl-wx.conf to change)\n\n");
@@ -352,16 +319,20 @@ void WX_DumpSensorInfo(FILE *fd)
      fprintf(fd, "\n   Sensor Locking is DISABLED (edit rtl-wx.conf to change)\n\n");
 }
 
-void printSensorStatus(FILE *fd,char *str, int lock_code, int lock_code_change_count, WX_Timestamp *ts)
+void printSensorStatus(FILE *fd,char *str, int lock_code, int lock_code_change_count, int data_timeout_count, WX_Timestamp *ts)
 {
   if (ts->PktCnt != 0) {
     fprintf(fd,"%s  ", str);
 	if (lock_code == -1)
-	  fprintf(fd,"                            ");
+	  fprintf(fd,"                               ");
 	else
-	  fprintf(fd," 0x%02x         %3d           ", lock_code, lock_code_change_count);
-
-	fprintf(fd,"%02d/%02d/%04d %02d:%02d (@PktCnt: %d)\n",ts->Month, ts->Day, ts->Year, ts->Hour, ts->Minute, ts->PktCnt);
+	  fprintf(fd,"0x%02x      %3d          %2d      ", lock_code, lock_code_change_count, data_timeout_count);
+ 
+     
+   struct tm *localtm = localtime(&ts->timet);
+   fprintf(fd, "%02d/%02d/%04d at %02d:%02d:%02d",
+      localtm->tm_mon+1, localtm->tm_mday, localtm->tm_year+1900, localtm->tm_hour, localtm->tm_min, localtm->tm_sec);	   
+	fprintf(fd," (Msg# %d)\n", ts->PktCnt);
    }
 }
 
@@ -371,7 +342,8 @@ void printExtraSensorStatus(FILE *fd, int sensorIdx) {
 		sprintf(label,"   %s (Ch%2d)",WxConfig.extNameStrings[sensorIdx], sensorIdx+1);
   else
       sprintf(label,"   Ext Sensor %2d ", sensorIdx+1);
-  printSensorStatus(fd,label, wxData.ext[sensorIdx].LockCode, wxData.ext[sensorIdx].LockCodeMismatchCount, &wxData.ext[sensorIdx].Timestamp);
+  printSensorStatus(fd,label, wxData.ext[sensorIdx].LockCode, wxData.ext[sensorIdx].LockCodeMismatchCount, 
+      wxData.ext[sensorIdx].DataTimeoutCount, &wxData.ext[sensorIdx].Timestamp);
 }
 
 void WX_DumpConfigInfo(FILE *fd)
@@ -414,12 +386,35 @@ fprintf(fd, "\n");
 */
 }
 
+void printTimeDateAndUptime(FILE *fd) {
+  struct tm *localtm = localtime(&wxData.currentTime.timet);
+  fprintf(fd, "   Date: %02d/%02d/%04d    Time: %02d:%02d:%02d",
+      localtm->tm_mon+1, localtm->tm_mday, localtm->tm_year+1900, localtm->tm_hour, localtm->tm_min, localtm->tm_sec);	
+
+   time_t timeNow;
+   time(&timeNow);
+   long int seconds = difftime(timeNow, WX_programStartTime);
+      
+   int days = seconds / (60*60*24);
+   seconds = seconds % (60*60*24);
+   
+   int hours = seconds / (60*60);
+   seconds = seconds % (60*60);
+   
+   int minutes = seconds / 60;
+   seconds = seconds % 60;
+   
+   if (days > 0)
+     fprintf(fd,"    Uptime: %d days, %d hours, %d Minutes\n\n", days, hours, minutes);
+   else
+     fprintf(fd,"    Uptime: %d hours, %d Minutes\n\n", hours, minutes);
+}
+
 BOOL isTimestampPresent(WX_Timestamp *ts) {
   BOOL retVal=1;
   if (ts->PktCnt == 0) // If pkt count is non-zero - data has been stored
 		retVal=0;
   return(retVal);
 }
-
 
 

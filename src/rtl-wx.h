@@ -29,19 +29,14 @@ typedef enum _BOOL { FALSE = 0, TRUE } BOOL;
 // serve two distinct functions 1) They indicate whether a record has any data in it or is empty and 2) they
 // indicate when the data for that record was gathered.
 //
-// The placement of timestamps on gathered data has been optimized to support some the historical data gathering
-// functions of the software.  For example, even though it would be sufficient to timestamp a block of data that was
-// received in one packet from a sensor, in some cases, each data item is individually marked with a timestamp.  This is
-// to help support min/max data tracking using the same C structures and functions that manipulate the current data struct.  
+// Although it seems sufficient to timestamp all the fields received in one message from a sensor, 
+// each data item is individually marked with a timestamp.
+// THESE FIELD SPECIFIC TIMESTAMPS ARE REQUIRED BY THE MAX/MIN HISTORICAL DATA TRACKING CODE
+//
 typedef struct WX_timestamp
 {
 unsigned int	PktCnt;       // Value of global pkt count when timestamp was taken
-unsigned int	ClockTickCnt; // Total number of elapsed minutes when timestamp taken
-int		      Year;
-unsigned char	Month;
-unsigned char	Day;
-unsigned char	Hour;
-unsigned char	Minute;
+time_t			timet;
 } WX_Timestamp;
 
 
@@ -53,6 +48,7 @@ WX_Timestamp AvgSpeedTimestamp;
 BOOL		BatteryLow;
 int	   LockCode;
 int		LockCodeMismatchCount;
+int      DataTimeoutCount;
 int		Bearing;	   //°
 float		Speed;		//m/sec
 float		AvgSpeed;	//m/sec
@@ -67,10 +63,9 @@ WX_Timestamp RateTimestamp;
 BOOL		BatteryLow;
 int      LockCode;
 int		LockCodeMismatchCount;
+int      DataTimeoutCount;
 int	   Rate;		         //mm/hr
 int		Total;		      //mm
-int		TotalYesterday;	//mm
-WX_Timestamp 	LastReset; 	// Date and time of last reset
 } WX_RainGaugeData;
 
 typedef struct WX_outdoor_unit_data
@@ -82,6 +77,7 @@ WX_Timestamp DewpointTimestamp;
 BOOL		BatteryLow;
 int      LockCode;
 int		LockCodeMismatchCount;
+int      DataTimeoutCount;
 int		Channel;	   //(don't think this is relevant for this unit)
 float		Temp;		   //°C
 int		RelHum;		//%
@@ -98,6 +94,7 @@ WX_Timestamp PressureTimestamp;
 BOOL		BatteryLow;
 int   	LockCode;
 int		LockCodeMismatchCount;
+int      DataTimeoutCount;
 float		Temp;		      //°C
 int		RelHum;		   //%
 float		Dewpoint;	   //°C
@@ -115,26 +112,11 @@ WX_Timestamp DewpointTimestamp;
 BOOL		BatteryLow;
 int      LockCode;
 int		LockCodeMismatchCount;
+int      DataTimeoutCount;
 float		Temp;		   //°C
 int		RelHum;		//%
 float		Dewpoint;	//°C
 } WX_ExtraSensorData;
-
-typedef struct WX_minute_data
-{
-WX_Timestamp   Timestamp;
-BOOL		      BatteryLow;
-unsigned char  Minutes;
-} WX_MinuteData;
-
-
-typedef struct WX_date_time_data
-{
-// Date and time for this packet type are stored elsewhere so don't duplicate here.
-unsigned int	PktCntAtLastUpdate;
-BOOL		BatteryLow;
-} WX_DateTimeData;
-
 
 #define MAX_SENSOR_CHANNEL_INDEX 9
 #define EXTRA_SENSOR_ARRAY_SIZE MAX_SENSOR_CHANNEL_INDEX+1
@@ -153,8 +135,6 @@ typedef struct WX_data
  WX_OutdoorUnitData odu;
  WX_IndoorUnitData idu;
  WX_ExtraSensorData ext[EXTRA_SENSOR_ARRAY_SIZE]; // indexes 0..9 are used
- WX_MinuteData m;
- WX_DateTimeData dt;
 } WX_Data;
 
 //-------------------------------------------------------------------------------------------------------------------------------
@@ -168,13 +148,12 @@ extern void WX_DumpConfigInfo(FILE *fd);
 extern BOOL isTimestampPresent(WX_Timestamp *ts);
 
 //-------------------------------------------------------------------------------------------------------------------------------
-// SlugWx.c routines and data
+// rtl-wx.c routines and data
 //-------------------------------------------------------------------------------------------------------------------------------
 
 //the global collection of latest weather station data
 extern WX_Data wxData;
 extern time_t WX_programStartTime;
-extern char WX_uptimeString[];
 
 //-------------------------------------------------------------------------------------------------------------------------------
 // TagProc.c routines

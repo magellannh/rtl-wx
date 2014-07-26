@@ -44,7 +44,6 @@
 WX_Data wxData;
 
 time_t WX_programStartTime;
-char WX_uptimeString[100];
 
 // Misc defines used only by this module
 #define FALSE 0
@@ -204,19 +203,24 @@ int main(int argc, char *argv[])
   exit((int) 0);
 } // end of main
 
-static void init_sensor_lock_code_info() {
+static void init_sensor_lock_and_timeout_info() {
   wxData.idu.LockCode = -1;
   wxData.idu.LockCodeMismatchCount = 0;
+  wxData.idu.DataTimeoutCount = 0;
   wxData.odu.LockCode = -1;
   wxData.odu.LockCodeMismatchCount = 0;
+  wxData.odu.DataTimeoutCount = 0;
   wxData.rg.LockCode = -1;
   wxData.rg.LockCodeMismatchCount = 0;
+  wxData.rg.DataTimeoutCount = 0;
   wxData.wg.LockCode = -1;
-  wxData.wg.LockCodeMismatchCount = 0; 
+  wxData.wg.LockCodeMismatchCount = 0;
+  wxData.wg.DataTimeoutCount = 0;
   int i;
   for(i=0;i<=MAX_SENSOR_CHANNEL_INDEX;i++) {
     wxData.ext[i].LockCode = -1;
-    wxData.ext[i].LockCodeMismatchCount = 0;
+    wxData.ext[i].LockCodeMismatchCount = 0;    
+    wxData.ext[i].DataTimeoutCount = 0;
   } 
 }
 
@@ -326,8 +330,8 @@ void runServerStandaloneLoop(int receiveDesc, FILE *outputfd)
 				WX_InitHistoricalMaxMinData();
 				break;
 			 case 'r':
-				DPRINTF("Executing user command to reset sensor lock code information\n");
-				init_sensor_lock_code_info();
+				DPRINTF("Executing user command to reset sensor lock code and timout information\n");
+				init_sensor_lock_and_timeout_info();
 				break;
 			 case 's':
 				DPRINTF("Executing user command to save data snapshot and rain snapshot\n");
@@ -377,7 +381,7 @@ void WX_Init() {
    
   // Only init this at startup since it is accessed asynchronously in callback routine
   WxConfig.sensorLockingEnabled = 0;
-  init_sensor_lock_code_info();
+  init_sensor_lock_and_timeout_info();
   
   WX_processConfigSettingsFile(CONFIG_FILE_PATH , &WxConfig);
   
@@ -548,13 +552,6 @@ void WX_process_rtl_433_pkt(unsigned char *msg, int sensor_id) {
        wxData.rg.BatteryLow = (msg[3] & 0x04) ? TRUE : FALSE;
        wxData.rg.Rate = rain_rate;
        wxData.rg.Total = total_rain;
-       wxData.rg.TotalYesterday = -1;
-       wxData.rg.LastReset.Year = 0;
-       wxData.rg.LastReset.Month = 0;
-       wxData.rg.LastReset.Day = 0;
-       wxData.rg.LastReset.Hour = 0;
-       wxData.rg.LastReset.Minute = 0;
-       wxData.rg.LastReset.ClockTickCnt = 0; // set reset date as invalid		  
        wxData.currentTime.PktCnt++;
        wxData.rg.Timestamp = wxData.currentTime;
        wxData.rg.RateTimestamp = wxData.currentTime;
@@ -692,7 +689,7 @@ void outputProgramHelp(FILE *fd)
   	fprintf(fd,"             l  - clear log file (rtl-wx.log)\n");
 	fprintf(fd,"             m  - show historical max/min data\n");
 	fprintf(fd,"             n  - clear historical max/min data\n");
-	fprintf(fd,"             r  - reset (clear) all sensor lock codes\n");
+	fprintf(fd,"             r  - reset sensor lock codes and clear timeout counts\n");
 	fprintf(fd,"             s  - Save data snapshot now\n");
 	fprintf(fd,"             t  - Toggle raw sensor message display mode\n");
 	fprintf(fd,"             u  - Initiate FTP upload\n");

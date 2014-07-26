@@ -1,4 +1,4 @@
-VERSION_STRING = v2.1
+VERSION_STRING = v2.2
 BUILD_DATE_STRING=$(shell date +"%m-%d-%Y")
 
 # Uncomment below to build for Netgear R7000 or similar cpu on DD-WRT

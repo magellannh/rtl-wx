@@ -19,8 +19,6 @@
 //*******************************************************************************************************
 // This is a generic handler for sensor fields that don't have data because no packets have arrived from
 // the weather station for the given sensor type.  
-// (note: This routine doesn't work well for checking the date and hour
-// of timestamps because even though a sensor packet might have arrived, the hour and date is only set once per hour)
 BOOL checkAndHandleNoData(ParserControlVars *pVars)
 {
   BOOL retVal;
@@ -232,11 +230,17 @@ char *getDayOfWeek(int month, int day, int year)
 void processTimestampField(char *tsParams, ParserControlVars *pVars)
 {
   WX_Timestamp *ts = pVars->ts;
+  struct tm *localts;
+  
+  time_t timeNow = time(NULL);
+  if (ts->PktCnt == 0)
+     localts = localtime(&timeNow); // When timestamp is invalid, init localts to something
+  else
+     localts = localtime(&ts->timet);
 
-  // TSDATE - Need to handle no data case specially
   if (strcmp(tsParams,"TSDATE") == 0) {
-    if (ts->Year == 0) {
-      // This is to handle main date not being set yet. 
+    // TSDATE - Need to handle no data case specially
+    if (ts->PktCnt == 0) {
       if (pVars->formatForNoData == 'D')
 	       sprintf(pVars->outputStr,"--/--/----");
       else if (pVars->formatForNoData == 'S')
@@ -245,28 +249,17 @@ void processTimestampField(char *tsParams, ParserControlVars *pVars)
 	       sprintf(pVars->outputStr,"00/00/0000");
     }
     else {
-      sprintf(pVars->outputStr,"%02d/%02d/%04d", ts->Month, ts->Day, ts->Year);  
+      sprintf(pVars->outputStr,"%02d/%02d/%04d", localts->tm_mon+1, localts->tm_mday, localts->tm_year+1900);  
     }
   }
-  // TSTIME is complicated because of the case where hour has no data but minute data is good.
   else if (strcmp(tsParams, "TSTIME") == 0) {
-   if ((ts->Year != 0) && (ts->ClockTickCnt != 0)) {
+   if (ts->PktCnt != 0) {
      if (pVars->formatControlStr[0] != '2')
         sprintf(pVars->outputStr,"%02d:%02d %s",
-               (ts->Hour>12?ts->Hour-12:(ts->Hour<1?12:ts->Hour)),
-                    ts->Minute,((ts->Hour >=12)?"PM":"AM"));
+               (localts->tm_hour>12?localts->tm_hour-12:(localts->tm_hour<1?12:localts->tm_hour)),
+                    localts->tm_min,((localts->tm_hour >=12)?"PM":"AM"));
      else
-        sprintf(pVars->outputStr,"%02d:%02d",ts->Hour, ts->Minute);
-   }
-   else if (ts->ClockTickCnt != 0) { // Hour has no data, but minute data is good 
-     if (pVars->formatForNoData == 'D')
-       sprintf(pVars->outputStr,"--:%02d   ",ts->Minute);
-     else if (pVars->formatForNoData == 'S')
-           sprintf(pVars->outputStr,"%s:%02d",pVars->NoDataStr, ts->Minute);
-     else if (pVars->formatForNoData == '0')
-       sprintf(pVars->outputStr,"00:%02d   ",ts->Minute);
-     else
-       sprintf(pVars->outputStr,"  :%02d",ts->Minute);      
+        sprintf(pVars->outputStr,"%02d:%02d",localts->tm_hour, localts->tm_min);
    }
    else {
      if (pVars->formatForNoData == 'D')
@@ -278,59 +271,46 @@ void processTimestampField(char *tsParams, ParserControlVars *pVars)
      else
        sprintf(pVars->outputStr,"  :     ");    
    }
-  }
-  // Handle Minute and packet count seperately.  They can have data when the rest of the date doesn't
+  } 
   else if (strcmp(tsParams, "TSPKTCNT") == 0)
       sprintf(pVars->outputStr,"%d",ts->PktCnt);
-  else if ((strcmp(tsParams, "TSMINUTE") == 0) && (ts->ClockTickCnt != 0))
-      sprintf(pVars->outputStr,"%02d",ts->Minute);
-  // If Year is 0, Date and hour have not yet been set
-  else if (ts->Year == 0) {
-    if (pVars->formatForNoData == 'D')
-       sprintf(pVars->outputStr,"--");
-    else if (pVars->formatForNoData == 'S')
-           sprintf(pVars->outputStr,"%s",pVars->NoDataStr);
-    else if (pVars->formatForNoData == '0')
-       sprintf(pVars->outputStr,"00");   
-  }
-  else {
-    // Handle stand alone year, month, day, hour flavors here
-    if (strcmp(tsParams, "TSYEAR") == 0)
-      sprintf(pVars->outputStr,"%04d",ts->Year);
-    else if (strcmp(tsParams, "TSMONTH") == 0) 
-        sprintf(pVars->outputStr,"%02d",ts->Month);
-    else if (strcmp(tsParams, "TSMONTHTEXT") == 0) {
+  else if (strcmp(tsParams, "TSMINUTE") == 0)
+      sprintf(pVars->outputStr,"%02d",localts->tm_min);
+  else if (strcmp(tsParams, "TSYEAR") == 0)
+      sprintf(pVars->outputStr,"%04d",localts->tm_year+1900);
+  else if (strcmp(tsParams, "TSMONTH") == 0) 
+        sprintf(pVars->outputStr,"%02d",localts->tm_mon+1);
+  else if (strcmp(tsParams, "TSMONTHTEXT") == 0) {
       int maxLen = pVars->formatControlStr[0]- '0';
-      if ((ts->Month >=1) && (ts->Month <=12))
-        sprintf(pVars->outputStr, "%s",textMonth[ts->Month-1]);
+      if ((localts->tm_mon >=0) && (localts->tm_mon < 12))
+        sprintf(pVars->outputStr, "%s",textMonth[localts->tm_mon]);
       if ((maxLen > 0) && (maxLen <= 9))
          pVars->outputStr[maxLen]=0;
     }
-    else if (strcmp(tsParams, "TSDAY") == 0) 
-      sprintf(pVars->outputStr,"%02d",ts->Day);
-    else if (strcmp(tsParams, "TSHOUR") == 0)  {
+  else if (strcmp(tsParams, "TSDAY") == 0) 
+      sprintf(pVars->outputStr,"%02d",localts->tm_mday);
+  else if (strcmp(tsParams, "TSHOUR") == 0)  {
       if (pVars->formatControlStr[0] != '2')
         sprintf(pVars->outputStr,"%02d",
-                  (ts->Hour>12? ts->Hour-12 : (ts->Hour<1?12:ts->Hour)));
+                  (localts->tm_hour>12? localts->tm_hour-12 : (localts->tm_hour<1?12:localts->tm_hour)));
       else
-        sprintf(pVars->outputStr,"%02d",ts->Hour);
+        sprintf(pVars->outputStr,"%02d",localts->tm_hour);
     }
-    else if (strcmp(tsParams, "TSDAYOFWEEK") == 0) {
+  else if (strcmp(tsParams, "TSDAYOFWEEK") == 0) {
       int maxLen = pVars->formatControlStr[0]-'0';
-      sprintf(pVars->outputStr,"%s", getDayOfWeek(ts->Month, ts->Day, ts->Year));
+      sprintf(pVars->outputStr,"%s", getDayOfWeek(localts->tm_mon+1, localts->tm_mday, localts->tm_year+1900));
       if ((maxLen > 0) && (maxLen <= 9))
          pVars->outputStr[maxLen]=0;
     }
-    else if (strcmp(tsParams, "TSAMPM") == 0) {
-      if (ts->Hour < 12)
+  else if (strcmp(tsParams, "TSAMPM") == 0) {
+      if (localts->tm_hour < 12)
         strcpy(pVars->outputStr,"AM");
       else
         strcpy(pVars->outputStr,"PM");
-    }
   }
 }
 
-void formatRainResetField(ParserControlVars *pVars)
+/* no longer supported void formatRainResetField(ParserControlVars *pVars)
 {
   // Set timestamp to date and time of last rain gauge reset
   pVars->ts = &pVars->weatherDatap->rg.LastReset;
@@ -349,7 +329,7 @@ void formatRainResetField(ParserControlVars *pVars)
     char *formatStr= &pVars->fieldToGet[2];
     processTimestampField(formatStr, pVars);
   }
-}
+}*/
 
 //*************************************************************************************************************
 void processIduTag(ParserControlVars *pVars)
@@ -497,12 +477,13 @@ void procesRgTag(ParserControlVars *pVars)
   }
   else if (strcmp(pVars->fieldToGet,"RAINTOTAL") == 0)
 		formatRainField(pVars->weatherDatap->rg.Total, pVars);
+/* Total yesterday and rain reset are not supported now that we're getting data directly from sensors
   else if (strcmp(pVars->fieldToGet,"RAINYESTERDAY") == 0)
 		formatRainField(pVars->weatherDatap->rg.TotalYesterday, pVars);
   else if (strcmp(pVars->fieldToGet,"RAINRESET") == 0)
     formatRainResetField(pVars);
   else if (strncmp(pVars->fieldToGet,"RR",2) == 0)
-    formatRainResetField(pVars);
+    formatRainResetField(pVars); */
   else if (strncmp(pVars->fieldToGet,"TS",2) == 0)
 		processTimestampField(pVars->fieldToGet, pVars);
   else
@@ -612,8 +593,6 @@ void processTag(ParserControlVars *pVars)
       procesRainHistTag(pVars);  
   else if (strcmp(pVars->sensorToGetFrom,"WG") == 0)
       procesWgTag(pVars);			
-  else if (strcmp(pVars->sensorToGetFrom,"TICK") == 0)
-      sprintf(pVars->outputStr, "%d", pVars->weatherDatap->currentTime.ClockTickCnt);
   else if (strcmp(pVars->sensorToGetFrom,"EXT1") == 0)
       procesExtTag(0, pVars);
   else if (strcmp(pVars->sensorToGetFrom,"EXT2") == 0)

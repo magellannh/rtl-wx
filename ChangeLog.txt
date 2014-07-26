@@ -2,6 +2,10 @@ RTL-Wx Weather sensor monitoring software
 
 Version Info and Release
 
+07-25-2014 - v2.2
+  - Reworked timestamp sructs and tlogic to use C time_t instead of storing min/hour/day/month/year.
+  - Added timeout field to sensor info->sensor status output
+  
 07-23-2014 - Restructured to support DD-WRT
   - Renamed program from SlugWx (PiWx) to RTL-Wx and renamed several support files (eg SlugWx.conf to rtl-wx-conf)
   - Reorganized public folder layout (changed public to www, merged thttp into www)
@@ -10,7 +14,7 @@ Version Info and Release
   - Fixed bug in sensor naming code (from 07/03) that caused memory corruption (accidental semicolon after for loop)
   - Eliminated legacy wmr9x8 serial port weather station support (now only suports 433mhz USB rtlsdr)
   - Updated Documentation to prepare for release
-
+/
 07-03-2014 - Added ability to name sensors for debug info display (see rtl-wx.conf)
 06-28-2014 - Fixed error in SlugWx.htx that caused duplicate sample in graph displays (param 28? duplicated)
  
