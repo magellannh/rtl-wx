@@ -9,7 +9,7 @@
 
    Data records are saved using a first in never out ring buffer.  Once the max number of
    records to store is reached, saving additional records causes the oldest record to be 
-   discarded.  Data is never pulled out of the ring, bug rather it is replaced by newer data.
+   discarded.  Data is never pulled out of the ring, but rather it is replaced by newer data.
 
    Data inside the ring can be referenced by requesting a specific historical record number.
    historical record 1 returns the newest record.  The larger the record number requested, the
@@ -121,13 +121,38 @@ void WX_SaveWeatherDataRecord(WX_Data *weatherDatap)
 
   updateMinData(weatherDatap);
   updateMaxData(weatherDatap);
-
-  // If latest record has no new data in it (no pkts received), save an empty data record instead
+  
+  if ((weatherDatap->idu.Timestamp.PktCnt != 0) &&
+      ((weatherDatap->idu.Timestamp.PktCnt+100) < weatherDatap->currentTime.PktCnt))
+      weatherDatap->idu.noDataBetweenSnapshots++;
+  if ((weatherDatap->odu.Timestamp.PktCnt != 0) &&
+      ((weatherDatap->odu.Timestamp.PktCnt+100) < weatherDatap->currentTime.PktCnt))
+      weatherDatap->odu.noDataBetweenSnapshots++;
+  if ((weatherDatap->rg.Timestamp.PktCnt != 0) &&
+      ((weatherDatap->rg.Timestamp.PktCnt+100) < weatherDatap->currentTime.PktCnt))
+      weatherDatap->rg.noDataBetweenSnapshots++;
+  if ((weatherDatap->wg.Timestamp.PktCnt != 0) &&
+      ((weatherDatap->wg.Timestamp.PktCnt+100) < weatherDatap->currentTime.PktCnt))
+      weatherDatap->wg.noDataBetweenSnapshots++;
+      
+  int i;
+  for(i=0;i<=MAX_SENSOR_CHANNEL_INDEX;i++) {
+    if ((weatherDatap->ext[i].Timestamp.PktCnt != 0) &&
+       ((weatherDatap->ext[i].Timestamp.PktCnt+100) < weatherDatap->currentTime.PktCnt))
+        weatherDatap->ext[i].noDataBetweenSnapshots++;
+       wxData.ext[i].noDataBetweenSnapshots = 0;
+  } 
+  
+  if ((weatherDatap->idu.Timestamp.PktCnt != 0) &&
+      ((weatherDatap->idu.Timestamp.PktCnt+100) < weatherDatap->currentTime.PktCnt))
+      weatherDatap->idu.noDataBetweenSnapshots++; 
+               
+  // If current record has no new data at all (no pkts from any sensor), save an empty data record instead
   if (weatherDatap->currentTime.PktCnt == pktCntAtLastSnapshot) {
     memset(&ringBuffer[inIndex], 0, sizeof(WX_Data));
     ringBuffer[inIndex].currentTime = weatherDatap->currentTime;
     DPRINTF("Warning: No weather packets received between data snapshots\n");
-    weatherDatap->dataTimeoutCnt++;
+    weatherDatap->noDataBetweenSnapshots++;
   }
   else 
      ringBuffer[inIndex] = *weatherDatap; // Copy the entire weather data structure into the buffer

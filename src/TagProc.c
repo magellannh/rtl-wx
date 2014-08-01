@@ -625,8 +625,6 @@ void processTag(ParserControlVars *pVars)
       procesExtTag(9, pVars);
   else if (strcmp(pVars->sensorToGetFrom,"BADPKTCNT") == 0)
       sprintf(pVars->outputStr, "%d", pVars->weatherDatap->BadPktCnt); 
-  else if (strcmp(pVars->sensorToGetFrom,"RESYNCCNT") == 0)
-      sprintf(pVars->outputStr, "%d", pVars->weatherDatap->ResyncCnt); 
   else if (strcmp(pVars->sensorToGetFrom,"UNSUPPORTEDPKTCNT") == 0)
       sprintf(pVars->outputStr, "%d", pVars->weatherDatap->UnsupportedPktCnt); 
   else if (strncmp(pVars->sensorToGetFrom,"TS",2) == 0) {

@@ -216,21 +216,26 @@ int main(int argc, char *argv[])
 static void init_sensor_lock_and_timeout_info() {
   wxData.idu.LockCode = -1;
   wxData.idu.LockCodeMismatchCount = 0;
-  wxData.idu.DataTimeoutCount = 0;
+  wxData.idu.noDataFor300Seconds = 0;
+  wxData.idu.noDataBetweenSnapshots = 0;
   wxData.odu.LockCode = -1;
   wxData.odu.LockCodeMismatchCount = 0;
-  wxData.odu.DataTimeoutCount = 0;
+  wxData.odu.noDataFor300Seconds = 0;
+  wxData.odu.noDataBetweenSnapshots = 0;
   wxData.rg.LockCode = -1;
   wxData.rg.LockCodeMismatchCount = 0;
-  wxData.rg.DataTimeoutCount = 0;
+  wxData.rg.noDataFor300Seconds = 0;
+  wxData.rg.noDataBetweenSnapshots = 0;
   wxData.wg.LockCode = -1;
   wxData.wg.LockCodeMismatchCount = 0;
-  wxData.wg.DataTimeoutCount = 0;
+  wxData.wg.noDataFor300Seconds = 0;
+  wxData.wg.noDataBetweenSnapshots = 0;
   int i;
   for(i=0;i<=MAX_SENSOR_CHANNEL_INDEX;i++) {
     wxData.ext[i].LockCode = -1;
     wxData.ext[i].LockCodeMismatchCount = 0;    
-    wxData.ext[i].DataTimeoutCount = 0;
+    wxData.ext[i].noDataFor300Seconds = 0;
+    wxData.ext[i].noDataBetweenSnapshots = 0;
   } 
 }
 

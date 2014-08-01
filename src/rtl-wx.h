@@ -58,7 +58,8 @@ WX_Timestamp AvgSpeedTimestamp;
 BOOL     BatteryLow;
 int      LockCode;
 int      LockCodeMismatchCount;
-int      DataTimeoutCount;
+int      noDataFor300Seconds;
+int      noDataBetweenSnapshots;
 int      Bearing;      //°
 float    Speed;        //m/sec
 float    AvgSpeed;     //m/sec
@@ -73,7 +74,8 @@ WX_Timestamp RateTimestamp;
 BOOL     BatteryLow;
 int      LockCode;
 int      LockCodeMismatchCount;
-int      DataTimeoutCount;
+int      noDataFor300Seconds;
+int      noDataBetweenSnapshots;
 int      Rate;               //mm/hr
 int      Total;              //mm
 } WX_RainGaugeData;
@@ -87,7 +89,8 @@ WX_Timestamp DewpointTimestamp;
 BOOL     BatteryLow;
 int      LockCode;
 int      LockCodeMismatchCount;
-int      DataTimeoutCount;
+int      noDataFor300Seconds; // No data received for >180 seconds
+int      noDataBetweenSnapshots;
 int      Channel;      //(don't think this is relevant for this unit)
 float    Temp;         //°C
 int      RelHum;       //%
@@ -104,7 +107,8 @@ WX_Timestamp PressureTimestamp;
 BOOL     BatteryLow;
 int      LockCode;
 int      LockCodeMismatchCount;
-int      DataTimeoutCount;
+int      noDataFor300Seconds;
+int      noDataBetweenSnapshots;
 float    Temp;           //°C
 int      RelHum;         //%
 float    Dewpoint;       //°C
@@ -122,7 +126,8 @@ WX_Timestamp DewpointTimestamp;
 BOOL     BatteryLow;
 int      LockCode;
 int      LockCodeMismatchCount;
-int      DataTimeoutCount;
+int      noDataFor300Seconds;
+int      noDataBetweenSnapshots;
 float    Temp;         //°C
 int      RelHum;       //%
 float    Dewpoint;     //°C
@@ -137,8 +142,7 @@ typedef struct WX_data
  WX_Timestamp currentTime;
  int BadPktCnt;
  int UnsupportedPktCnt;
- int ResyncCnt;
- int dataTimeoutCnt;
+ int noDataBetweenSnapshots;
  
  WX_WindGaugeData wg;
  WX_RainGaugeData rg;

@@ -281,7 +281,7 @@ void printTimestamp(FILE *fd, WX_Timestamp *ts) {
       localtm->tm_mon+1, localtm->tm_mday, localtm->tm_year+1900, localtm->tm_hour, localtm->tm_min);      
 }
 
-static void printSensorStatus(FILE *fd,char *str, int lock_code, int lock_code_change_count, int data_timeout_count, WX_Timestamp *ts);
+static void printSensorStatus(FILE *fd,char *str, int lock_code, int lock_code_change_count, int no_data_for_180_secs, int no_data_between_snapshots, WX_Timestamp *ts);
 static void printExtraSensorStatus(FILE *fd, int sensorIdx);
 
 void WX_DumpSensorInfo(FILE *fd)
@@ -289,14 +289,14 @@ void WX_DumpSensorInfo(FILE *fd)
    printTimeDateAndUptime(fd);
 
    fprintf(fd, "   Messages Processed: %d     Messages With Errors: %d\n",wxData.currentTime.PktCnt, wxData.BadPktCnt);
-
-   if (wxData.ResyncCnt > 0)
-     fprintf(fd, "   Resyncs: %d\n",wxData.ResyncCnt);
+   
+   if (wxData.UnsupportedPktCnt > 0)
+     fprintf(fd, "   Count of snapshots without new data: %d\n",wxData.noDataBetweenSnapshots);
    if (wxData.UnsupportedPktCnt > 0)
      fprintf(fd, "   Unsupported Packets: %d\n",wxData.UnsupportedPktCnt);
               
-   fprintf(fd,"\n                   Lock   Lock  Code\n");
-     fprintf(fd,"   Sensor Name     Code   Mismatches   Timeouts   Last Valid Message Received\n\n");
+   fprintf(fd,"\n                   Lock  Lock  Code  300 sec.  Snapshot\n");
+     fprintf(fd,"   Sensor Name     Code  Mismatches  Timeouts  Timeouts  Last Valid Message Received\n\n");
 
    char label[80];
    if (WxConfig.oduNameString[0] != 0)
@@ -304,23 +304,23 @@ void WX_DumpSensorInfo(FILE *fd)
    else
       sprintf(label,"   Outdoor Unit  ");
    printSensorStatus(fd, label, wxData.odu.LockCode, wxData.odu.LockCodeMismatchCount, 
-             wxData.odu.DataTimeoutCount, &wxData.odu.Timestamp);
+             wxData.odu.noDataFor300Seconds, wxData.odu.noDataBetweenSnapshots, &wxData.odu.Timestamp);
    
    if (WxConfig.iduNameString[0] != 0)
       sprintf(label,"   %s (IDU) ",WxConfig.iduNameString);
    else
       sprintf(label,"   Indoor Unit   ");
    printSensorStatus(fd,label, wxData.idu.LockCode, wxData.idu.LockCodeMismatchCount, 
-             wxData.idu.DataTimeoutCount, &wxData.idu.Timestamp);
+             wxData.idu.noDataFor300Seconds, wxData.idu.noDataBetweenSnapshots, &wxData.idu.Timestamp);
    
    int sensorIdx;
    for (sensorIdx=0;sensorIdx<=MAX_SENSOR_CHANNEL_INDEX;sensorIdx++)
       printExtraSensorStatus(fd, sensorIdx);
         
    printSensorStatus(fd,"   Wind Gauge    ", wxData.wg.LockCode,  wxData.wg.LockCodeMismatchCount,  
-          wxData.wg.DataTimeoutCount, &wxData.wg.Timestamp);
+          wxData.wg.noDataFor300Seconds, wxData.wg.noDataBetweenSnapshots, &wxData.wg.Timestamp);
    printSensorStatus(fd,"   Rain Gauge    ", wxData.rg.LockCode,  wxData.rg.LockCodeMismatchCount,  
-          wxData.rg.DataTimeoutCount, &wxData.rg.Timestamp);
+          wxData.rg.noDataFor300Seconds, wxData.rg.noDataBetweenSnapshots, &wxData.rg.Timestamp);
      
    if (WxConfig.sensorLockingEnabled)
      fprintf(fd, "\n   Sensor Locking is ENABLED (edit rtl-wx.conf to change)\n\n");
@@ -328,14 +328,15 @@ void WX_DumpSensorInfo(FILE *fd)
      fprintf(fd, "\n   Sensor Locking is DISABLED (edit rtl-wx.conf to change)\n\n");
 }
 
-void printSensorStatus(FILE *fd,char *str, int lock_code, int lock_code_change_count, int data_timeout_count, WX_Timestamp *ts)
+void printSensorStatus(FILE *fd,char *str, int lock_code, int lock_code_change_count, int no_data_for_180_secs, int no_data_between_snapshots, WX_Timestamp *ts)
 {
   if (ts->PktCnt != 0) {
     fprintf(fd,"%s  ", str);
    if (lock_code == -1)
-      fprintf(fd,"                               ");
+      fprintf(fd,"                                      ");
    else
-      fprintf(fd,"0x%02x      %3d          %2d      ", lock_code, lock_code_change_count, data_timeout_count);
+      fprintf(fd,"0x%02x     %3d        %3d       %3d     ", lock_code, lock_code_change_count, 
+                                                         no_data_for_180_secs, no_data_between_snapshots);
  
    struct tm *localtm = localtime(&ts->timet);
    fprintf(fd, "%02d/%02d/%04d at %02d:%02d:%02d",
@@ -351,7 +352,7 @@ void printExtraSensorStatus(FILE *fd, int sensorIdx) {
   else
       sprintf(label,"   Ext Sensor %2d ", sensorIdx+1);
   printSensorStatus(fd,label, wxData.ext[sensorIdx].LockCode, wxData.ext[sensorIdx].LockCodeMismatchCount, 
-      wxData.ext[sensorIdx].DataTimeoutCount, &wxData.ext[sensorIdx].Timestamp);
+      wxData.ext[sensorIdx].noDataFor300Seconds, wxData.ext[sensorIdx].noDataBetweenSnapshots, &wxData.ext[sensorIdx].Timestamp);
 }
 
 void WX_DumpConfigInfo(FILE *fd)

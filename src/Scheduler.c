@@ -148,7 +148,7 @@ void WX_DoScheduledActions()
 int checkSensorForTimeout(WX_Timestamp *ts) {
   long secondsSinceLastMessage = difftime(wxDatap->currentTime.timet, ts->timet);
   
-  if ((ts->PktCnt > 0) && (secondsSinceLastMessage > 240))
+  if ((ts->PktCnt > 0) && (secondsSinceLastMessage > 300))
      return 1;
   else
      return 0;
@@ -158,18 +158,18 @@ void checkForSensorTimeouts() {
 
   lastTimeoutCheckTime = time(NULL);
   if (checkSensorForTimeout(&wxDatap->idu.Timestamp))
-    wxDatap->idu.DataTimeoutCount++;
+    wxDatap->idu.noDataFor300Seconds++;
   if (checkSensorForTimeout(&wxDatap->odu.Timestamp))
-    wxDatap->odu.DataTimeoutCount++;  
+    wxDatap->odu.noDataFor300Seconds++;  
   if (checkSensorForTimeout(&wxDatap->rg.Timestamp))
-    wxDatap->rg.DataTimeoutCount++;
+    wxDatap->rg.noDataFor300Seconds++;
   if (checkSensorForTimeout(&wxDatap->wg.Timestamp))
-    wxDatap->wg.DataTimeoutCount++;
+    wxDatap->wg.noDataFor300Seconds++;
     
   int sensorIdx;
   for (sensorIdx=0;sensorIdx<=MAX_SENSOR_CHANNEL_INDEX;sensorIdx++)
      if (checkSensorForTimeout(&wxDatap->ext[sensorIdx].Timestamp))
-       wxDatap->ext[sensorIdx].DataTimeoutCount++;
+       wxDatap->ext[sensorIdx].noDataFor300Seconds++;
 }
 
 void WX_DoConfigFileRead()
