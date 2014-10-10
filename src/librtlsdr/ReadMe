@@ -1,1 +1,3 @@
 If building from sources, get the latest librtlsdr from github and expand it here.  toolchain.cmake is needed for DD-WRT builds, but not for Raspberry Pi builds.  See platform specific instructions for more details.
+
+If rtl-wx build complains about not finding convenience.h, copy it from rtl-wx\src\librtlsdr\src\convenience to rtl-wx\src\librtlsdr\include
