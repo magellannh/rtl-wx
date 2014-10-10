@@ -31,11 +31,14 @@ WX_ConfigSettings WxConfig;
 #define READ_BUFSIZE 1000
 
 static int processNumericVar(char *buf,char *matchStr, int *varp);
+static int processFloatVar(char *buf,char *matchStr, float *varp);
 static int processStringVar(char *buf,char *matchStr, char *destStr);
 static int processExtSensorNames(char *buf, WX_ConfigSettings *cVarp);
 static int processftpFilename(char *buf, WX_ConfigSettings *cVarp);
 static int processTagProcFilename(char *buf, WX_ConfigSettings *cVarp);
 static int processMailMsgConfig(char *buf, WX_ConfigSettings *cVarp);
+static int processRealtimeCsvFileInfo(char *buf, WX_ConfigSettings *cVarp);
+static int processCsvFileInfo(char *buf, WX_ConfigSettings *cVarp);
 
 /*-----------------------------------------------------------------------------------------------------------------------------------------------------
   WX_ProcessConfFile()
@@ -50,15 +53,22 @@ int WX_processConfigSettingsFile(char *inFname, WX_ConfigSettings *cVarp)
  char rdBuf[READ_BUFSIZE];
 
  // These settings are reset before each read of the configuration file.
- cVarp->tagFileParseFrequency=15; // 15 minutes
- cVarp->configFileReadFrequency=5;
+ cVarp->tagFileParseFrequency=0; 
+ cVarp->configFileReadFrequency=0; // 15 minutes
  cVarp->dataSnapshotFrequency=15;
- cVarp->rainDataSnapshotFrequency=60;
+ cVarp->rainDataSnapshotFrequency=0;
 
+ cVarp->fuelBurnerOnWattageThreshold=0;
+ cVarp->fuelBurnerGallonsPerHour=1;
+ 
  cVarp->webcamSnapshotFrequency=0;
-
+ 
+ cVarp->realtimeCsvWriteFrequency=0;
+ cVarp->realtimeCsvFile[0]=0;
+ 
+ cVarp->numCsvFilesToUpdate=0;
  cVarp->NumTagFilesToParse=0;
- cVarp->ftpUploadFrequency=15;
+ cVarp->ftpUploadFrequency=0;
  cVarp->ftpServerHostname[0]=0;
  cVarp->ftpServerUsername[0]=0;
  cVarp->ftpServerPassword[0]=0;
@@ -86,6 +96,9 @@ int WX_processConfigSettingsFile(char *inFname, WX_ConfigSettings *cVarp)
   if ((rdBuf[0] != ';') && (rdBuf[0] != '[')) { 
    if (processNumericVar(rdBuf,"sensorLockingEnabled", &cVarp->sensorLockingEnabled)) {}
    else if (processNumericVar(rdBuf,"altitudeInFeet", &cVarp->altitudeInFeet)) {}
+   else if (processNumericVar(rdBuf,"fuelBurnerOnWattageThreshold", &cVarp->fuelBurnerOnWattageThreshold)) {}
+   else if (processFloatVar(rdBuf,"fuelBurnerGallonsPerHour", &cVarp->fuelBurnerGallonsPerHour)) {}
+   else if (processNumericVar(rdBuf,"dataSnapshotFrequency", &cVarp->dataSnapshotFrequency)) {}
    else if (processNumericVar(rdBuf,"ftpUploadFrequency", &cVarp->ftpUploadFrequency)) {}
    else if (processNumericVar(rdBuf,"tagFileParseFrequency", &cVarp->tagFileParseFrequency)) {}
    else if (processNumericVar(rdBuf,"webcamSnapshotFrequency", &cVarp->webcamSnapshotFrequency)) {}
@@ -104,6 +117,8 @@ int WX_processConfigSettingsFile(char *inFname, WX_ConfigSettings *cVarp)
    else if (processMailMsgConfig(rdBuf,cVarp)) {}
    else if (processftpFilename(rdBuf,cVarp)) {}
    else if (processTagProcFilename(rdBuf,cVarp)) {}
+   else if (processRealtimeCsvFileInfo(rdBuf,cVarp)) {}
+   else if (processCsvFileInfo(rdBuf,cVarp)) {}
   }
  }
  fclose(infd);
@@ -164,7 +179,23 @@ int processNumericVar(char *buf,char *matchStr, int *varp)
 
   return(retVal);   
 }
+// Process a config file line with a float var  on it
+// Must be of the form 'floatVar=n.n' with no spaces or special characters.  
+int processFloatVar(char *buf,char *matchStr, float *varp)
+{
+  int retVal=0;
+  int len= strlen(matchStr);
+  int varCount;
+  float temp=0;
 
+  if (strncmp(buf, matchStr, len) == 0) {
+    varCount = sscanf(&buf[len+1],"%f",&temp);
+    if (varCount == 1) 
+       *varp = temp;
+    retVal=1;
+  }
+  return(retVal);   
+}
 // process config file line for FTP filename.  Format is "localFilename remotePathAndFilename"
 // the ftpFile text is r
 int processftpFilename(char *buf, WX_ConfigSettings *cVarp)
@@ -241,6 +272,94 @@ int processTagProcFilename(char *buf, WX_ConfigSettings *cVarp)
   }
   return(retVal);
 }
+int processRealtimeCsvFileInfo(char *buf, WX_ConfigSettings *cVarp) 
+{
+  int i;
+  int j;
+  int retVal=0;
+  char *fname = cVarp->realtimeCsvFile;
+  
+  if (strncmp("realtimeCsvFile",buf, 15) == 0) {
+   i=15;
+   // skip over any whitespace
+   while (((buf[i] == ' ') || (buf[i] == '\t')) && (i < READ_BUFSIZE))
+    i++;
+   // copy filename string until whitespace is encountered
+   j=0;
+   while ((buf[i] != ' ') && (buf[i] != '\t') && (buf[i] != 0) && (i < READ_BUFSIZE))
+     fname[j++] = buf[i++];
+   fname[j] = 0;
+   
+   // skip over any whitespace
+   while (((buf[i] == ' ') || (buf[i] == '\t')) && (i < READ_BUFSIZE))
+    i++;
+    
+   // copy snapshots string until whitespace is encountered
+   j=0;
+   char minutesStr[MAX_CONFIG_NAME_SIZE];
+   while ((buf[i] != ' ') && (buf[i] != '\t') && (buf[i] != '\r') &&
+          (buf[i] != '\n') && (buf[i] != 0) && (i < READ_BUFSIZE))
+     minutesStr[j++] = buf[i++];
+   minutesStr[j] = 0;
+   
+   int minutesBetweenUpdates = atoi(minutesStr);
+   if (minutesBetweenUpdates < 0)
+      minutesBetweenUpdates = 0;
+   
+   if ((fname[0] != 0) && (minutesBetweenUpdates != 0)) {
+    cVarp->realtimeCsvWriteFrequency = minutesBetweenUpdates;
+    retVal = 1;
+   }
+   else
+    retVal=0;
+  }
+  return(retVal);
+}
+int processCsvFileInfo(char *buf, WX_ConfigSettings *cVarp) 
+{
+  int i;
+  int j;
+  int retVal=0;
+  char *fname = cVarp->csvFiles[cVarp->numCsvFilesToUpdate].fname;
+  char snapshotStr[MAX_CONFIG_NAME_SIZE];
+  
+  if (strncmp("csvFile",buf, 7) == 0) {
+   i=7;
+   // skip over any whitespace
+   while (((buf[i] == ' ') || (buf[i] == '\t')) && (i < READ_BUFSIZE))
+    i++;
+   // copy filename string until whitespace is encountered
+   j=0;
+   while ((buf[i] != ' ') && (buf[i] != '\t') && (buf[i] != 0) && (i < READ_BUFSIZE))
+     fname[j++] = buf[i++];
+   fname[j] = 0;
+   
+   // skip over any whitespace
+   while (((buf[i] == ' ') || (buf[i] == '\t')) && (i < READ_BUFSIZE))
+    i++;
+    
+   // copy snapshots string until whitespace is encountered
+   j=0;
+   while ((buf[i] != ' ') && (buf[i] != '\t') && (buf[i] != '\r') &&
+          (buf[i] != '\n') && (buf[i] != 0) && (i < READ_BUFSIZE))
+     snapshotStr[j++] = buf[i++];
+   snapshotStr[j] = 0;
+   int snapshotsBetweenUpdates = atoi(snapshotStr);
+   if (snapshotsBetweenUpdates > 96)
+      snapshotsBetweenUpdates = 0;
+   else if (snapshotsBetweenUpdates < 1)
+      snapshotsBetweenUpdates = 0;
+   
+   if ((fname[0] != 0) && (snapshotsBetweenUpdates != 0)) {
+    cVarp->csvFiles[cVarp->numCsvFilesToUpdate].snapshotsBetweenUpdates = snapshotsBetweenUpdates;
+    cVarp->numCsvFilesToUpdate++;
+    retVal = 1;
+   }
+   else
+    retVal=0;
+  }
+  return(retVal);
+}
 static int extractQuotedString(char *buf, int *iptr, char *destString)
 {
    int j;
@@ -261,7 +380,6 @@ static int extractQuotedString(char *buf, int *iptr, char *destString)
    else
       return(0);
 }
-
 
 int processMailMsgConfig(char *buf, WX_ConfigSettings *cVarp)
 {

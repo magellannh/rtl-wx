@@ -35,6 +35,8 @@
 #include "rtl-wx.h"
 
 static time_t lastConfProcTime;
+static time_t lastRealTimeCsvWriteTime;
+static time_t lastCsvFileWriteTime[MAX_CONFIG_LIST_SIZE];
 static time_t lastDataSnapshotTime;
 static time_t lastRainDataSnapshotTime;
 static time_t lastWebcamSnapshotTime;
@@ -42,6 +44,8 @@ static time_t lastTagProcTime;
 static time_t lastFtpUploadTime;
 static time_t lastTimeoutCheckTime;
 
+static unsigned int csvFileWriteCnt[MAX_CONFIG_LIST_SIZE];
+static unsigned int realTimeCsvWriteCnt;
 static unsigned int configProcCnt;
 static unsigned int dataSnapshotCnt;
 static unsigned int rainDataSnapshotCnt;
@@ -68,7 +72,11 @@ void WX_InitActionScheduler(WX_Data *weatherDatap, WX_ConfigSettings *configurat
   configVarp = configurationVarp;
 
   updateCurrentTime(wxDatap);
-
+  
+  int i;
+  for (i=0;i<MAX_CONFIG_LIST_SIZE;i++)
+    lastCsvFileWriteTime[i] = time(NULL);
+  lastRealTimeCsvWriteTime = time(NULL);
   lastConfProcTime = time(NULL);
   lastDataSnapshotTime = time(NULL);
   lastRainDataSnapshotTime = time(NULL);
@@ -77,6 +85,9 @@ void WX_InitActionScheduler(WX_Data *weatherDatap, WX_ConfigSettings *configurat
   lastFtpUploadTime = time(NULL);
   lastTimeoutCheckTime = time(NULL);
 
+  for (i=0;i<MAX_CONFIG_LIST_SIZE;i++)
+     csvFileWriteCnt[i] = 0;
+  realTimeCsvWriteCnt = 0;     
   configProcCnt = 0;
   dataSnapshotCnt = 0;
   rainDataSnapshotCnt = 0;
@@ -94,9 +105,9 @@ void WX_DoScheduledActions()
   int i;
 
   updateCurrentTime(wxDatap);
-  if (getMinutesToWait(1, time(NULL), lastTimeoutCheckTime) == 0)
+  if (getMinutesToWait(1, time(NULL), lastTimeoutCheckTime) == 0) // check for timeouts once a minute
      checkForSensorTimeouts();
-  
+     
   // First reread configuration file if more than xx minutes has elapsed since last read
   if (getMinutesToWait(configVarp->configFileReadFrequency, time(NULL), lastConfProcTime) == 0) {
     //DPRINTF("Reading rtl-wx.conf at %s", asctime(localtime(&lastConfProcTime)));
@@ -107,10 +118,20 @@ void WX_DoScheduledActions()
   if (getMinutesToWait(configVarp->dataSnapshotFrequency, time(NULL), lastDataSnapshotTime) == 0) {
     //DPRINTF(" Saving snapshot at %s", asctime(localtime(&lastDataSnapshotTime)));
     //printf("saving data snapshot...");fflush(stdout);
-    WX_DoDataSnapshotSave();
+    WX_DoDataSnapshotSave(configVarp->dataSnapshotFrequency);
     //printf("done.\n");fflush(stdout);
   }
-
+  
+  if (getMinutesToWait(configVarp->realtimeCsvWriteFrequency, time(NULL), lastRealTimeCsvWriteTime) == 0) 
+     // write current sensor data to real time csv file
+     WX_DoRealTimeCsvFileWrite();  
+     
+  // Check if any csv files should get updated
+  for (i=0;i < configVarp->numCsvFilesToUpdate;i++) {
+    if (getMinutesToWait(configVarp->csvFiles[i].snapshotsBetweenUpdates*configVarp->dataSnapshotFrequency, 
+                       time(NULL), lastCsvFileWriteTime[i]) == 0)
+       WX_DoCsvFileUpdate(i);
+  }
   // Next save off rain data snapshot if it's time 
   if (getMinutesToWait(configVarp->rainDataSnapshotFrequency, time(NULL), lastRainDataSnapshotTime) == 0) {
     //DPRINTF(" Saving rain data snapshot at %s", asctime(localtime(&lastRainDataSnapshotTime)));
@@ -145,10 +166,12 @@ void WX_DoScheduledActions()
   }
 }
 
-int checkSensorForTimeout(WX_Timestamp *ts) {
+int checkSensorFor300SecondTimeout(WX_Timestamp *ts) {
   long secondsSinceLastMessage = difftime(wxDatap->currentTime.timet, ts->timet);
   
-  if ((ts->PktCnt > 0) && (secondsSinceLastMessage > 300))
+  // Only record timeout if sensor is active and also try to only record one timeout
+  // event in the case of a sensor going away or a sensor having a very long timeout
+  if ((ts->PktCnt > 0) && (secondsSinceLastMessage >= 300) && (secondsSinceLastMessage < 370))
      return 1;
   else
      return 0;
@@ -157,18 +180,19 @@ int checkSensorForTimeout(WX_Timestamp *ts) {
 void checkForSensorTimeouts() {
 
   lastTimeoutCheckTime = time(NULL);
-  if (checkSensorForTimeout(&wxDatap->idu.Timestamp))
+  if (checkSensorFor300SecondTimeout(&wxDatap->idu.Timestamp))
     wxDatap->idu.noDataFor300Seconds++;
-  if (checkSensorForTimeout(&wxDatap->odu.Timestamp))
+  if (checkSensorFor300SecondTimeout(&wxDatap->odu.Timestamp))
     wxDatap->odu.noDataFor300Seconds++;  
-  if (checkSensorForTimeout(&wxDatap->rg.Timestamp))
+  if (checkSensorFor300SecondTimeout(&wxDatap->rg.Timestamp))
     wxDatap->rg.noDataFor300Seconds++;
-  if (checkSensorForTimeout(&wxDatap->wg.Timestamp))
+  if (checkSensorFor300SecondTimeout(&wxDatap->wg.Timestamp))
     wxDatap->wg.noDataFor300Seconds++;
-    
+  if (checkSensorFor300SecondTimeout(&wxDatap->energy.Timestamp))
+    wxDatap->energy.noDataFor300Seconds++;   
   int sensorIdx;
   for (sensorIdx=0;sensorIdx<=MAX_SENSOR_CHANNEL_INDEX;sensorIdx++)
-     if (checkSensorForTimeout(&wxDatap->ext[sensorIdx].Timestamp))
+     if (checkSensorFor300SecondTimeout(&wxDatap->ext[sensorIdx].Timestamp))
        wxDatap->ext[sensorIdx].noDataFor300Seconds++;
 }
 
@@ -183,19 +207,31 @@ void WX_DoConfigFileRead()
 // Time to save a data snapshot by copying the contents of the wxData structure into the historical storage structure
 // By default this is done every 15 minutes.
 //--------------------------------------------------------------------------------------------------------------------------------------------
-void WX_DoDataSnapshotSave()
+void WX_DoDataSnapshotSave(int minutesPerSnapshot)
 {
-  WX_SaveWeatherDataRecord(wxDatap);
+  WX_SaveWeatherDataRecord(wxDatap, configVarp, minutesPerSnapshot);
   lastDataSnapshotTime = time(NULL);
   dataSnapshotCnt++;
 }
 
+void WX_DoRealTimeCsvFileWrite() {
+  WX_WriteRealTimeCSVFile();
+  lastRealTimeCsvWriteTime = time(NULL);
+  realTimeCsvWriteCnt++;
+}
+void WX_DoCsvFileUpdate(int index) {
+  WX_WriteSensorDataToCSVFile(configVarp->csvFiles[index].fname, wxDatap, 
+                  configVarp, configVarp->csvFiles[index].snapshotsBetweenUpdates);
+  lastCsvFileWriteTime[index] = time(NULL);
+  csvFileWriteCnt[index]++;
+}
+
+     
 //--------------------------------------------------------------------------------------------------------------------------------------------
 // Time to save a data snapshot by copying the contents of the wxData structure into the historical storage structure
 // By default this is done every 15 minutes.
 //--------------------------------------------------------------------------------------------------------------------------------------------
-void WX_DoRainDataSnapshotSave()
-{
+void WX_DoRainDataSnapshotSave() {
   WX_SaveRainDataRecord(wxDatap);
   lastRainDataSnapshotTime = time(NULL);
   rainDataSnapshotCnt++;
@@ -271,34 +307,34 @@ void updateCurrentTime(WX_Data *weatherDatap) {
 // Determine the remaining wait time before an action should be done.  This routine tries to sync up occurances so they fall on the
 // hour and at multiples of the hour where possible.  For example a frequency of 15 minutes should happen at on the hour and at
 // hour plus 15, 30, and 45.  Also, frequencies greater than 59 minutes are synced up to happen at the top of the hour.
-// Finally, there's some magic to delay the action by 30 seconds in order to deal with likely inconsistencies between the weather station
-// time and the slug time
 unsigned int getMinutesToWait(unsigned int frequency, time_t currentTime, time_t timeLastDone)
 {
   int minutesLeft = 0;
   int minsSinceLastDone = difftime(currentTime, timeLastDone)/SECS_PER_MIN;
   struct tm *localTime = localtime(&currentTime);
   int currentMinute = localTime->tm_min;
-  int currentSecond = localTime->tm_sec;
-
+  
   if (frequency == 0)
     minutesLeft = 9999;
   else if (frequency < 60) {
     if (((60 % frequency) == 0) && ((currentMinute % frequency) != 0))
       minutesLeft = frequency - (currentMinute % frequency);
     else if (((60 % frequency) == 0) && (minsSinceLastDone != 0))
-      if (currentSecond < 30)
-         minutesLeft = 1;
-      else
-         minutesLeft = 0;
+      minutesLeft = 0;
     else
       minutesLeft = frequency - minsSinceLastDone;
   }
-  else {
-    if (((frequency % 60) == 0) && (minsSinceLastDone != currentMinute))
-      minutesLeft = (60 - currentMinute) % 60;
-    else
-      minutesLeft = frequency - minsSinceLastDone;
+  else  { // CODE ASSUMES IF FREQUENCY > 60 IT'S A MULTIPLE OF 60
+    if (((frequency % 60) == 0) && (minsSinceLastDone != currentMinute)) {
+      minutesLeft = (60 - localTime->tm_min) % 60;
+      int frequencyHours = frequency/60;
+      int hoursLeft = (frequencyHours-1) - (localTime->tm_hour % frequencyHours);
+      if ((localTime->tm_hour % frequencyHours != 0) && (localTime->tm_min == 0))
+         hoursLeft++;
+      if  (!(((localTime->tm_hour % frequencyHours) == 0) && (localTime->tm_min == 0)))
+        minutesLeft += (hoursLeft*60);
+    } else
+        minutesLeft = frequency - minsSinceLastDone;
   }
   if (minutesLeft < 0)
      minutesLeft = 0;
@@ -319,7 +355,11 @@ void printSchedulerAction(FILE *fd, char *label, time_t *lastOccurancep,
   if (strlen(timeStr) != 0)
      timeStr[strlen(timeStr)-1] = 0;
 
-  fprintf(fd,"%14s  %s   %4d        %3d      ",label, timeStr, count, frequency);
+  fprintf(fd,"%14s  %s   %4d       ",label, timeStr, count);
+  if (frequency != 0)
+     fprintf(fd,"%02d:%02d     ", frequency/60 , frequency % 60);
+  else
+     fprintf(fd,"--:--     ");
   if (frequency != 0)
      fprintf(fd,"%02d:%02d\n", remaining/60 , remaining % 60);
   else
@@ -333,12 +373,19 @@ void WX_DumpSchedulerInfo(FILE *fd)
   fprintf(fd, "\nCurrent System Time: %s", asctime(localtime(&timeNow)));
   fprintf(fd, "\n");
   fprintf(fd, "                                            Total   Frequency Remaining\n");
-  fprintf(fd, "Action          Last Occurance           Occurances   (min)    (hh:mm)\n");
+  fprintf(fd, "Action          Last Occurance           Occurances  (hh:mm)   (hh:mm) \n");
   fprintf(fd, "--------------  ------------------------ ---------- --------- ---------\n");
-  printSchedulerAction(fd, "Read Conf File",  
+  printSchedulerAction(fd,  "Read Conf File",  
      &lastConfProcTime, configProcCnt,configVarp->configFileReadFrequency);
-  printSchedulerAction(fd, "Save  Snapshot",  
+  printSchedulerAction(fd,  "Save  Snapshot",  
      &lastDataSnapshotTime, dataSnapshotCnt,configVarp->dataSnapshotFrequency);
+  printSchedulerAction(fd,  "Write Realtime",  
+     &lastRealTimeCsvWriteTime, realTimeCsvWriteCnt, configVarp->realtimeCsvWriteFrequency);
+  int i; 
+  for(i=0;i<configVarp->numCsvFilesToUpdate;i++)
+    printSchedulerAction(fd,"Append To  CSV",  
+       &lastCsvFileWriteTime[i], csvFileWriteCnt[i],
+       configVarp->csvFiles[i].snapshotsBetweenUpdates*configVarp->dataSnapshotFrequency);
   printSchedulerAction(fd, "Read Tag Files",  
      &lastTagProcTime, tagProcCnt,configVarp->tagFileParseFrequency);
   printSchedulerAction(fd, "Webcam    Save",  

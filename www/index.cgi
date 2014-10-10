@@ -12,6 +12,11 @@ elif [ $QUERY_STRING = "showSensorStatus" ]; then
 	echo "<PRE>"
 	../bin/rtl-wx -r d
 	echo "</PRE>"
+elif [ $QUERY_STRING = "showEnergyData" ]; then
+	echo "<div align="left"><H2 style=\"text-indent:175px;\">Recent Energy Sensor Data (watts)</H2></div>"
+	echo "<PRE>"
+	../bin/rtl-wx -r e
+	echo "</PRE>"
 elif [ $QUERY_STRING = "clearLockCodes" ]; then
 	../bin/rtl-wx -r r
 	echo  "<div align="center"><H2>All sensor lock codes have been cleared</H2></div>"

@@ -1,10 +1,22 @@
 /*
- * rtl_433, turns your Realtek RTL2832 based DVB dongle into a 433.92MHz generic data receiver
- * Copyright (C) 2012 by Benjamin Larsson <benjamin@southpole.se>
+ * rtl-433fm-standalone
+ * Standalone module  to support message reception from
+ * 433Mhz weather and energy sensors by using a 
+ * RealTek RTL2832 DVB usb dongle.
+ * Supports demodulation/decoding of OOK_PCM,
+ * Manchester, and FSK sensor messages.
  *
- * Based on rtl_sdr
+ * This file, with rtl-433fm-demod and  rtl-433fm-decode combines
+ *  work from rtl_433 and rtl_fm to support Oregon scientific 
+ * weather sensors (v2.1 and 3 using manchester encoding) and
+ * Efergy energy monitors. 
  *
- * Copyright (C) 2012 by Steve Markgraf <steve@steve-m.de>
+ * Based on rtl_sdr , rtl_433, and rtl_fm
+ *   Copyright (C) 2012 by Steve Markgraf <steve@steve-m.de>
+ *   Copyright (C) 2012 by Hoernchen <la@tfc-server.de>
+ *   Copyright (C) 2012 by Kyle Keen <keenerd@gmail.com>
+ *   Copyright (C) 2013 by Elias Oenal <EliasOenal@gmail.com>
+ *   Copyright (C) 2012 by Benjamin Larsson <benjamin@southpole.se>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,105 +31,43 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-
-
-/* Currently this can decode the temperature and id from Rubicson sensors
- *
- * the sensor sends 36 bits 12 times pwm modulated
- * the data is grouped into 9 nibles
- * [id0] [id1], [unk0] [temp0], [temp1] [temp2], [unk1] [unk2], [unk3]
- *
- * The id changes when the battery is changed in the sensor.
- * unk0 is always 1 0 0 0, most likely 2 channel bits as the sensor can recevice 3 channels
- * unk1-3 changes and the meaning is unknown
- * temp is 12 bit signed scaled by 10
- *
- * The sensor can be bought at Kjell&Co
- */
-
-/* Prologue sensor protocol
- *
- * the sensor sends 36 bits 7 times, before the first packet there is a pulse sent
- * the packets are pwm modulated
- *
- * the data is grouped in 9 nibles
- * [id0] [rid0] [rid1] [data0] [temp0] [temp1] [temp2] [humi0] [humi1]
- *
- * id0 is always 1001,9
- * rid is a random id that is generated when the sensor starts, could include battery status
- * the same batteries often generate the same id
- * data(3) is 0 the battery status, 1 ok, 0 low, first reading always say low
- * data(2) is 1 when the sensor sends a reading when pressing the button on the sensor
- * data(1,0)+1 forms the channel number that can be set by the sensor (1-3)
- * temp is 12 bit signed scaled by 10
- * humi0 is always 1100,c if no humidity sensor is available
- * humi1 is always 1100,c if no humidity sensor is available
- *
- * The sensor can be bought at Clas Ohlson
- */
-
+ 
 #include <errno.h>
 #include <signal.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
 
 #ifndef _WIN32
 #include <unistd.h>
 #else
-#include <Windows.h>
-#include <io.h>
+#include <windows.h>
 #include <fcntl.h>
+#include <io.h>
 #include "getopt/getopt.h"
+#define usleep(x) Sleep(x/1000)
+#ifdef _MSC_VER
+#define round(x) (x > 0.0 ? floor(x + 0.5): ceil(x - 0.5))
+#endif
+#define _USE_MATH_DEFINES
 #endif
 
+#include <math.h>
+#include <pthread.h>
+#include <libusb.h>
+
 #include "rtl-sdr.h"
+#include "convenience.h"
+#include "rtl-433fm.h"
 
-#define DEFAULT_SAMPLE_RATE     250000
-#define DEFAULT_FREQUENCY       433920000
-#define DEFAULT_HOP_TIME        (60*10)
-#define DEFAULT_HOP_EVENTS      2
-#define DEFAULT_ASYNC_BUF_NUMBER    32
-#define DEFAULT_BUF_LENGTH      (16 * 16384)
-#define DEFAULT_LEVEL_LIMIT     10000
-#define DEFAULT_DECIMATION_LEVEL 0
-#define MINIMAL_BUF_LENGTH      512
-#define MAXIMAL_BUF_LENGTH      (256 * 16384)
-#define FILTER_ORDER            1
-#define MAX_PROTOCOLS           10
-#define SIGNAL_GRABBER_BUFFER   (12 * DEFAULT_BUF_LENGTH)
-#define BITBUF_COLS             34
-#define BITBUF_ROWS             50
-
-static int do_exit = 0;
-static int do_exit_async=0, frequencies=0, events=0;
-uint32_t frequency[MAX_PROTOCOLS];
-time_t rawtime_old;
-int flag;
-uint32_t samp_rate=DEFAULT_SAMPLE_RATE;
-static uint32_t bytes_to_read = 0;
-static rtlsdr_dev_t *dev = NULL;
-static uint16_t scaled_squares[256];
-static int debug_output = 0;
 static int override_short = 0;
 static int override_long = 0;
+static int frequencies=0;
 
-/* Supported modulation types */
-#define     OOK_PWM_D   	1   /* Pulses are of the same length, the distance varies */
-#define     OOK_PWM_P   	2   /* The length of the pulses varies */
-#define     OOK_MANCHESTER	3	/* Manchester code */
-
-
-typedef struct {
-    unsigned int    id;
-    char            name[256];
-    unsigned int    modulation;
-    unsigned int    short_limit;
-    unsigned int    long_limit;
-    unsigned int    reset_limit;
-    int     (*json_callback)(uint8_t bits_buffer[BITBUF_ROWS][BITBUF_COLS]) ;
-} r_device;
+uint32_t frequency[MAX_PROTOCOLS];
+time_t rawtime_old;
+static uint32_t bytes_to_read = 0;
+static rtlsdr_dev_t *dev = NULL;
 
 static int debug_callback(uint8_t bb[BITBUF_ROWS][BITBUF_COLS]) {
     int i,j,k;
@@ -167,6 +117,19 @@ static int silvercrest_callback(uint8_t bb[BITBUF_ROWS][BITBUF_COLS]) {
     return 0;
 }
 
+/* Rubicson sensor
+ *
+ * the sensor sends 36 bits 12 times pwm modulated
+ * the data is grouped into 9 nibles
+ * [id0] [id1], [unk0] [temp0], [temp1] [temp2], [unk1] [unk2], [unk3]
+ *
+ * The id changes when the battery is changed in the sensor.
+ * unk0 is always 1 0 0 0, most likely 2 channel bits as the sensor can recevice 3 channels
+ * unk1-3 changes and the meaning is unknown
+ * temp is 12 bit signed scaled by 10
+ *
+ * The sensor can be bought at Kjell&Co
+ */
 static int rubicson_callback(uint8_t bb[BITBUF_ROWS][BITBUF_COLS]) {
     int temperature_before_dec;
     int temperature_after_dec;
@@ -199,6 +162,26 @@ static int rubicson_callback(uint8_t bb[BITBUF_ROWS][BITBUF_COLS]) {
     return 0;
 }
 
+/* Prologue sensor protocol
+ *
+ * the sensor sends 36 bits 7 times, before the first packet there is a pulse sent
+ * the packets are pwm modulated
+ *
+ * the data is grouped in 9 nibles
+ * [id0] [rid0] [rid1] [data0] [temp0] [temp1] [temp2] [humi0] [humi1]
+ *
+ * id0 is always 1001,9
+ * rid is a random id that is generated when the sensor starts, could include battery status
+ * the same batteries often generate the same id
+ * data(3) is 0 the battery status, 1 ok, 0 low, first reading always say low
+ * data(2) is 1 when the sensor sends a reading when pressing the button on the sensor
+ * data(1,0)+1 forms the channel number that can be set by the sensor (1-3)
+ * temp is 12 bit signed scaled by 10
+ * humi0 is always 1100,c if no humidity sensor is available
+ * humi1 is always 1100,c if no humidity sensor is available
+ *
+ * The sensor can be bought at Clas Ohlson
+ */
 static int prologue_callback(uint8_t bb[BITBUF_ROWS][BITBUF_COLS]) {
     int rid;
 
@@ -425,296 +408,6 @@ static int ws2000_callback(uint8_t bb[BITBUF_ROWS][BITBUF_COLS]) {
     return 1;
 }
 
-static int acurite_rain_gauge_callback(uint8_t bb[BITBUF_ROWS][BITBUF_COLS]) {
-    // This needs more validation to positively identify correct sensor type, but it basically works if message is really from acurite raingauge and it doesn't have any errors
-    if ((bb[0][0] != 0) && (bb[0][1] != 0) && (bb[0][2]!=0) && (bb[0][3] == 0) && (bb[0][4] == 0)) {
-	    float total_rain = ((bb[0][1]&0xf)<<8)+ bb[0][2];
-		total_rain /= 2; // Sensor reports number of bucket tips.  Each bucket tip is .5mm
-        fprintf(stderr, "AcuRite Rain Gauge Total Rain is %2.1fmm\n", total_rain);
-		fprintf(stderr, "Raw Message: %02x %02x %02x %02x %02x\n",bb[0][0],bb[0][1],bb[0][2],bb[0][3],bb[0][4]);
-        return 1;
-    }
-    return 0;
-}
-
-// Callback routines can optionally notify rtl-wx code on receive of Oregon Scientific packets.
-static void (*os_bad_pkt_received_callback)(unsigned char *)=NULL;
-void rtl_433_register_os_bad_pkt_received_callback(void (*callback_function)(unsigned char *)) {
-  os_bad_pkt_received_callback = callback_function;
-}
-static void (*os_pkt_received_callback)(unsigned char *,int)=NULL;
-void rtl_433_register_os_pkt_received_callback(void (*callback_function)(unsigned char *,int)) {
-  os_pkt_received_callback = callback_function;
-}
-
-float get_os_temperature(unsigned char *message, unsigned int sensor_id) {
-  // sensor ID included  to support sensors with temp in different position
-  float temp_c = 0;
-  temp_c = (((message[5]>>4)*100)+((message[4]&0x0f)*10) + ((message[4]>>4)&0x0f)) /10.0F;
-  if (message[5] & 0x0f)
-       temp_c = -temp_c;
-  return temp_c;
-}
-unsigned int get_os_humidity(unsigned char *message, unsigned int sensor_id) {
- // sensor ID included to support sensors with temp in different position
- int humidity = 0;
-    humidity = ((message[6]&0x0f)*10)+(message[6]>>4);
- return humidity;
-}
-
-static int validate_os_checksum(unsigned char *msg, int checksum_nibble_idx) {
-  // Oregon Scientific v2.1 and v3 checksum is a  1 byte  'sum of nibbles' checksum.  
-  // with the 2 nibbles of the checksum byte  swapped.
-  int i;
-  unsigned int checksum, sum_of_nibbles=0;
-  for (i=0; i<(checksum_nibble_idx-1);i+=2) {
-    unsigned char val=msg[i>>1];
-	sum_of_nibbles += ((val>>4) + (val &0x0f));
-  }
-  if (checksum_nibble_idx & 1) {
-     sum_of_nibbles += (msg[checksum_nibble_idx>>1]>>4);
-     checksum = (msg[checksum_nibble_idx>>1] & 0x0f) | (msg[(checksum_nibble_idx+1)>>1]&0xf0);
-  } else
-     checksum = (msg[checksum_nibble_idx>>1]>>4) | ((msg[checksum_nibble_idx>>1]&0x0f)<<4);
-  sum_of_nibbles &= 0xff;
-  
-  if (sum_of_nibbles == checksum)
-    return 0;
-  else {
-	if (os_bad_pkt_received_callback != NULL)
-		os_bad_pkt_received_callback(msg);
-
-    fprintf(stderr, "Checksum error in Oregon Scientific message.  Expected: %02x  Calculated: %02x\n", checksum, sum_of_nibbles);	
-	fprintf(stderr, "Message: "); int i; for (i=0 ;i<((checksum_nibble_idx+4)>>1) ; i++) fprintf(stderr, "%02x ", msg[i]); fprintf(stderr, "\n\n");
-	return 1;
-  }
-}
-
-static int validate_os_v2_message(unsigned char * msg, int bits_expected, int valid_v2_bits_received, 
-                                int nibbles_in_checksum) {
-  // Oregon scientific v2.1 protocol sends each bit using the complement of the bit, then the bit  for better error checking.  Compare number of valid bits processed vs number expected
-  if (bits_expected == valid_v2_bits_received) {
-    return (validate_os_checksum(msg, nibbles_in_checksum));	
-  } else {
-    if (os_bad_pkt_received_callback != NULL)
-      os_bad_pkt_received_callback(msg);
-//    fprintf(stderr, "Bit validation error on Oregon Scientific message.  Expected %d bits, received error after bit %d \n",        bits_expected, valid_v2_bits_received);	
-//    fprintf(stderr, "Message: "); int i; for (i=0 ;i<(bits_expected+7)/8 ; i++) fprintf(stderr, "%02x ", msg[i]); fprintf(stderr, "\n\n");
-  }
-  return 1;
-}
-
-static int oregon_scientific_v2_1_parser(uint8_t bb[BITBUF_ROWS][BITBUF_COLS]) {
-   // Check 2nd and 3rd bytes of stream for possible Oregon Scientific v2.1 sensor data (skip first byte to get past sync/startup bit errors)
-   if ( ((bb[0][1] == 0x55) && (bb[0][2] == 0x55)) ||
-	    ((bb[0][1] == 0xAA) && (bb[0][2] == 0xAA))) {
-	  int i,j;
-	  unsigned char msg[BITBUF_COLS] = {0};
-	   
-	  // Possible  v2.1 Protocol message
-	  int num_valid_v2_bits = 0;
-	  
-	  unsigned int sync_test_val = (bb[0][3]<<24) | (bb[0][4]<<16) | (bb[0][5]<<8) | (bb[0][6]);
-	  int dest_bit = 0;
-	  int pattern_index;
-	  // Could be extra/dropped bits in stream.  Look for sync byte at expected position +/- some bits in either direction
-      for(pattern_index=0; pattern_index<8; pattern_index++) {
-        unsigned int mask     = (unsigned int) (0xffff0000>>pattern_index);
-		unsigned int pattern  = (unsigned int)(0x55990000>>pattern_index);
-        unsigned int pattern2 = (unsigned int)(0xaa990000>>pattern_index);
-
-	//fprintf(stderr, "OS v2.1 sync byte search - test_val=%08x pattern=%08x  mask=%08x\n", sync_test_val, pattern, mask);
-
-	    if (((sync_test_val & mask) == pattern) || 
-		    ((sync_test_val & mask) == pattern2)) {
-		  //  Found sync byte - start working on decoding the stream data.
-		  // pattern_index indicates  where sync nibble starts, so now we can find the start of the payload
-	      int start_byte = 5 + (pattern_index>>3);
-	      int start_bit = pattern_index & 0x07;
-	//fprintf(stderr, "OS v2.1 Sync test val %08x found, starting decode at byte index %d bit %d\n", sync_test_val, start_byte, start_bit);
-	      int bits_processed = 0;
-		  unsigned char last_bit_val = 0;
-		  j=start_bit;
-	      for (i=start_byte;i<BITBUF_COLS;i++) {
-	        while (j<8) {
-			   if (bits_processed & 0x01) {
-			     unsigned char bit_val = ((bb[0][i] & (0x80 >> j)) >> (7-j));
-				 
-				 // check if last bit received was the complement of the current bit
-				 if ((num_valid_v2_bits == 0) && (last_bit_val == bit_val))
-				   num_valid_v2_bits = bits_processed; // record position of first bit in stream that doesn't verify correctly
-				 last_bit_val = bit_val;
-				   
-			     // copy every other bit from source stream to dest packet
-				 msg[dest_bit>>3] |= (((bb[0][i] & (0x80 >> j)) >> (7-j)) << (7-(dest_bit & 0x07)));
-				 
-	//fprintf(stderr,"i=%d j=%d dest_bit=%02x bb=%02x msg=%02x\n",i, j, dest_bit, bb[0][i], msg[dest_bit>>3]); 
-				 if ((dest_bit & 0x07) == 0x07) {
-				    // after assembling each dest byte, flip bits in each nibble to convert from lsb to msb bit ordering
-				    int k = (dest_bit>>3);
-                    unsigned char indata = msg[k];
-	                // flip the 4 bits in the upper and lower nibbles
-	                msg[k] = ((indata & 0x11) << 3) | ((indata & 0x22) << 1) |
-	   	                     ((indata & 0x44) >> 1) | ((indata & 0x88) >> 3);
-		            }
-				 dest_bit++;
-			     }
-				 else 
-				   last_bit_val = ((bb[0][i] & (0x80 >> j)) >> (7-j)); // used for v2.1 bit error detection
-			   bits_processed++;
-			   j++;
-	        }
-		    j=0;
-		  }
-		  break;
-	    } //if (sync_test_val...
-      } // for (pattern...
-	  
-
-    int sensor_id = (msg[0] << 8) | msg[1];
-	if ((sensor_id == 0x1d20) || (sensor_id == 0x1d30))	{
-	   if (validate_os_v2_message(msg, 153, num_valid_v2_bits, 15) == 0) {
-	     if (os_pkt_received_callback != NULL) {
-		os_pkt_received_callback(msg, sensor_id);
-		return 1;
-	     }
-	   int  channel = ((msg[2] >> 4)&0x0f);
-	   if (channel == 4)
-	       channel = 3; // sensor 3 channel number is 0x04
-		float temp_c = get_os_temperature(msg, sensor_id);
-		 if (sensor_id == 0x1d20) fprintf(stderr, "Weather Sensor THGR122N Channel %d ", channel);
-		 else fprintf(stderr, "Weather Sensor THGR968  Outdoor   ");
-		 fprintf(stderr, "Temp: %3.1f°C  %3.1f°F   Humidity: %d%%\n", temp_c, ((temp_c*9)/5)+32,get_os_humidity(msg, sensor_id));
-	   }
-	   return 1;  
-    } else if (sensor_id == 0x5d60) {
-	   if (validate_os_v2_message(msg, 185, num_valid_v2_bits, 19) == 0) {
-	     if (os_pkt_received_callback != NULL) {
-		os_pkt_received_callback(msg, sensor_id);
-		return 1;
-	     }
-	     unsigned int comfort = msg[7] >>4;
-	     char *comfort_str="Normal";
-	     if      (comfort == 4)   comfort_str = "Comfortable";
-	     else if (comfort == 8)   comfort_str = "Dry";
-	     else if (comfort == 0xc) comfort_str = "Humid";
-	     unsigned int forecast = msg[9]>>4;
-	     char *forecast_str="Cloudy";
-	     if      (forecast == 3)   forecast_str = "Rainy";
-	     else if (forecast == 6)   forecast_str = "Partly Cloudy";
-	     else if (forecast == 0xc) forecast_str = "Sunny";
-         float temp_c = get_os_temperature(msg, 0x5d60);
-	     fprintf(stderr,"Weather Sensor BHTR968  Indoor    Temp: %3.1f°C  %3.1f°F   Humidity: %d%%", temp_c, ((temp_c*9)/5)+32, get_os_humidity(msg, 0x5d60));  
-	     fprintf(stderr, " (%s) Pressure: %dmbar (%s)\n", comfort_str, ((msg[7] & 0x0f) | (msg[8] & 0xf0))+856, forecast_str);  
-	   }
-	   return 1;
-	} else if (sensor_id == 0x2d10) {
-	   if (validate_os_v2_message(msg, 161, num_valid_v2_bits, 16) == 0) {
-	     if (os_pkt_received_callback != NULL) {
-		os_pkt_received_callback(msg, sensor_id);
-		return 1;
-	     }
-	   float rain_rate = (((msg[4] &0x0f)*100)+((msg[4]>>4)*10) + ((msg[5]>>4)&0x0f)) /10.0F;
-       float total_rain = (((msg[7]&0xf)*10000)+((msg[7]>>4)*1000) + ((msg[6]&0xf)*100)+((msg[6]>>4)*10) + (msg[5]&0xf))/10.0F;
-	   fprintf(stderr, "Weather Sensor RGR968   Rain Gauge  Rain Rate: %2.0fmm/hr Total Rain %3.0fmm\n", rain_rate, total_rain);
-	   }
-	   return 1;
-	} else if (num_valid_v2_bits > 16) {
-//fprintf(stderr, "%d bit message received from unrecognized Oregon Scientific v2.1 sensor.\n", num_valid_v2_bits);
-//fprintf(stderr, "Message: "); for (i=0 ; i<20 ; i++) fprintf(stderr, "%02x ", msg[i]); fprintf(stderr,"\n\n");
-    } else {
-//fprintf(stderr, "\nPossible Oregon Scientific v2.1 message, but sync nibble wasn't found\n"); fprintf(stderr, "Raw Data: "); for (i=0 ; i<BITBUF_COLS ; i++) fprintf(stderr, "%02x ", bb[0][i]); fprintf(stderr,"\n\n");    
-    } 
-   } else {
-//if (bb[0][3] != 0) int i; fprintf(stderr, "\nBadly formatted OS v2.1 message encountered."); for (i=0 ; i<BITBUF_COLS ; i++) fprintf(stderr, "%02x ", bb[0][i]); fprintf(stderr,"\n\n");}
-   }
-   return 0;
-}
-
-static int oregon_scientific_v3_parser(uint8_t bb[BITBUF_ROWS][BITBUF_COLS]) {
- 
-   // Check stream for possible Oregon Scientific v3 protocol data (skip part of first and last bytes to get past sync/startup bit errors)
-   if ((((bb[0][0]&0xf) == 0x0f) && (bb[0][1] == 0xff) && ((bb[0][2]&0xc0) == 0xc0)) || 
-       (((bb[0][0]&0xf) == 0x00) && (bb[0][1] == 0x00) && ((bb[0][2]&0xc0) == 0x00))) {
-	  int i,j;
-	  unsigned char msg[BITBUF_COLS] = {0};	  
-	  unsigned int sync_test_val = (bb[0][2]<<24) | (bb[0][3]<<16) | (bb[0][4]<<8);
-	  int dest_bit = 0;
-	  int pattern_index;
-	  // Could be extra/dropped bits in stream.  Look for sync byte at expected position +/- some bits in either direction
-      for(pattern_index=0; pattern_index<16; pattern_index++) {
-        unsigned int     mask = (unsigned int)(0xfff00000>>pattern_index);
-        unsigned int  pattern = (unsigned int)(0xffa00000>>pattern_index);
-        unsigned int pattern2 = (unsigned int)(0xff500000>>pattern_index);
-		unsigned int pattern3 = (unsigned int)(0x00500000>>pattern_index);
-//fprintf(stderr, "OS v3 Sync nibble search - test_val=%08x pattern=%08x  mask=%08x\n", sync_test_val, pattern, mask);
-	    if (((sync_test_val & mask) == pattern)  ||
-            ((sync_test_val & mask) == pattern2) ||		
-            ((sync_test_val & mask) == pattern3)) {
-		  //  Found sync byte - start working on decoding the stream data.
-		  // pattern_index indicates  where sync nibble starts, so now we can find the start of the payload
-	      int start_byte = 3 + (pattern_index>>3);
-	      int start_bit = (pattern_index+4) & 0x07;
-//fprintf(stderr, "Oregon Scientific v3 Sync test val %08x ok, starting decode at byte index %d bit %d\n", sync_test_val, start_byte, start_bit);
-          j = start_bit;
-	      for (i=start_byte;i<BITBUF_COLS;i++) {
-	        while (j<8) {
-			   unsigned char bit_val = ((bb[0][i] & (0x80 >> j)) >> (7-j));
-				   
-			   // copy every  bit from source stream to dest packet
-			   msg[dest_bit>>3] |= (((bb[0][i] & (0x80 >> j)) >> (7-j)) << (7-(dest_bit & 0x07)));
-				 
-//fprintf(stderr,"i=%d j=%d dest_bit=%02x bb=%02x msg=%02x\n",i, j, dest_bit, bb[0][i], msg[dest_bit>>3]); 
-			   if ((dest_bit & 0x07) == 0x07) {
-				  // after assembling each dest byte, flip bits in each nibble to convert from lsb to msb bit ordering
-				  int k = (dest_bit>>3);
-                  unsigned char indata = msg[k];
-	              // flip the 4 bits in the upper and lower nibbles
-	              msg[k] = ((indata & 0x11) << 3) | ((indata & 0x22) << 1) |
-	   	                   ((indata & 0x44) >> 1) | ((indata & 0x88) >> 3);
-		         }
-			   dest_bit++;
-			   j++;
-			}
-			j=0;
-	       }
-		  break;
-		  }
-	    }
-		
-	if ((msg[0] == 0xf8) && (msg[1] == 0x24))	{
-	   if (validate_os_checksum(msg, 15) == 0) {
-	     if (os_pkt_received_callback != NULL) {
-		os_pkt_received_callback(msg, 0xf824);
-		return 1;
-	     }
-	     int  channel = ((msg[2] >> 4)&0x0f);
-	     float temp_c = get_os_temperature(msg, 0xf824);
-		 int humidity = get_os_humidity(msg, 0xf824);
-		 fprintf(stderr,"Weather Sensor THGR810  Channel %d Temp: %3.1f°C  %3.1f°F   Humidity: %d%%\n", channel, temp_c, ((temp_c*9)/5)+32, humidity);
-	   }
-	   return 1;
-    } else if ((msg[0] != 0) && (msg[1]!= 0)) { //  sync nibble was found  and some data is present...
-//fprintf(stderr, "Message received from unrecognized Oregon Scientific v3 sensor.\n");	
-//fprintf(stderr, "Message: "); for (i=0 ; i<BITBUF_COLS ; i++) fprintf(stderr, "%02x ", msg[i]); fprintf(stderr, "\n");
-//fprintf(stderr, "    Raw: "); for (i=0 ; i<BITBUF_COLS ; i++) fprintf(stderr, "%02x ", bb[0][i]); fprintf(stderr,"\n\n");       
-    } else if (bb[0][3] != 0) {
-//fprintf(stderr, "\nPossible Oregon Scientific v3 message, but sync nibble wasn't found\n"); fprintf(stderr, "Raw Data: "); for (i=0 ; i<BITBUF_COLS ; i++) fprintf(stderr, "%02x ", bb[0][i]); fprintf(stderr,"\n\n");   	
-    }
-   }	
-   else { // Based on first couple of bytes, either corrupt message or something other than an Oregon Scientific v3 message
-//if (bb[0][3] != 0) { fprintf(stderr, "\nUnrecognized Msg in v3: "); int i; for (i=0 ; i<BITBUF_COLS ; i++) fprintf(stderr, "%02x ", bb[0][i]); fprintf(stderr,"\n\n"); }
-   } 
-   return 0;
-}
-
-static int oregon_scientific_callback(uint8_t bb[BITBUF_ROWS][BITBUF_COLS]) {
- int ret = oregon_scientific_v2_1_parser(bb);
- if (ret == 0)
-   ret = oregon_scientific_v3_parser(bb);
- return ret;
-}
-
 // timings based on samp_rate=1024000
 r_device rubicson = {
     /* .id             = */ 1,
@@ -817,81 +510,6 @@ r_device steffen = {
     /* .json_callback  = */ &steffen_callback,
 };
 
-r_device acurite_rain_gauge = {
-    /* .id             = */ 10,
-    /* .name           = */ "Acurite 896 Rain Gauge",
-    /* .modulation     = */ OOK_PWM_D,
-    /* .short_limit    = */ 1744/4,
-    /* .long_limit     = */ 3500/4,
-    /* .reset_limit    = */ 5000/4,
-    /* .json_callback  = */ &acurite_rain_gauge_callback,
-};
-
-r_device oregon_scientific = {
-    /* .id             = */ 11,
-    /* .name           = */ "Oregon Scientific Weather Sensor",
-    /* .modulation     = */ OOK_MANCHESTER,
-    /* .short_limit    = */ 125, 
-    /* .long_limit     = */ 0, // not used
-    /* .reset_limit    = */ 600,
-    /* .json_callback  = */ &oregon_scientific_callback,
-};
-
-struct protocol_state {
-    int (*callback)(uint8_t bits_buffer[BITBUF_ROWS][BITBUF_COLS]);
-
-    /* bits state */
-    int bits_col_idx;
-    int bits_row_idx;
-    int bits_bit_col_idx;
-    uint8_t bits_buffer[BITBUF_ROWS][BITBUF_COLS];
-    int16_t bits_per_row[BITBUF_ROWS];
-    int     bit_rows;
-    unsigned int modulation;
-
-    /* demod state */
-    int pulse_length;
-    int pulse_count;
-    int pulse_distance;
-    int sample_counter;
-    int start_c;
-
-    int packet_present;
-    int pulse_start;
-    int real_bits;
-    int start_bit;
-    /* pwm limits */
-    int short_limit;
-    int long_limit;
-    int reset_limit;
-
-
-};
-
-
-struct dm_state {
-    FILE *file;
-    int save_data;
-    int32_t level_limit;
-    int32_t decimation_level;
-    int16_t filter_buffer[MAXIMAL_BUF_LENGTH+FILTER_ORDER];
-    int16_t* f_buf;
-    int analyze;
-    int debug_mode;
-
-    /* Signal grabber variables */
-    int signal_grabber;
-    int8_t* sg_buf;
-    int sg_index;
-    int sg_len;
-
-
-    /* Protocol states */
-    int r_dev_num;
-    struct protocol_state *r_devs[MAX_PROTOCOLS];
-
-};
-
 void usage(void)
 {
     fprintf(stderr,
@@ -921,7 +539,7 @@ sighandler(int signum)
 {
     if (CTRL_C_EVENT == signum) {
         fprintf(stderr, "Signal caught, exiting!\n");
-        do_exit = 1;
+        rtlsdr_do_exit = 1;
         rtlsdr_cancel_async(dev);
         return TRUE;
     }
@@ -931,116 +549,11 @@ sighandler(int signum)
 static void sighandler(int signum)
 {
     fprintf(stderr, "Signal caught, exiting!\n");
-    do_exit = 1;
+    rtlsdr_do_exit = 1;
+exit (1);
     rtlsdr_cancel_async(dev);
 }
 #endif
-
-/* precalculate lookup table for envelope detection */
-static void calc_squares() {
-    int i;
-    for (i=0 ; i<256 ; i++)
-        scaled_squares[i] = (128-i) * (128-i);
-}
-
-/** This will give a noisy envelope of OOK/ASK signals
- *  Subtract the bias (-128) and get an envelope estimation
- *  The output will be written in the input buffer
- *  @returns   pointer to the input buffer
- */
-
-static void envelope_detect(unsigned char *buf, uint32_t len, int decimate)
-{
-    uint16_t* sample_buffer = (uint16_t*) buf;
-    unsigned int i;
-    unsigned op = 0;
-    unsigned int stride = 1<<decimate;
-
-    for (i=0 ; i<len/2 ; i+=stride) {
-        sample_buffer[op++] = scaled_squares[buf[2*i  ]]+scaled_squares[buf[2*i+1]];
-    }
-}
-
-static void demod_reset_bits_packet(struct protocol_state* p) {
-    memset(p->bits_buffer, 0 ,BITBUF_ROWS*BITBUF_COLS);
-    memset(p->bits_per_row, 0 ,BITBUF_ROWS);
-    p->bits_col_idx = 0;
-    p->bits_bit_col_idx = 7;
-    p->bits_row_idx = 0;
-    p->bit_rows = 0;
-}
-
-static void demod_add_bit(struct protocol_state* p, int bit) {
-    p->bits_buffer[p->bits_row_idx][p->bits_col_idx] |= bit<<p->bits_bit_col_idx;
-    p->bits_bit_col_idx--;
-    if (p->bits_bit_col_idx<0) {
-        p->bits_bit_col_idx = 7;
-        p->bits_col_idx++;
-        if (p->bits_col_idx>BITBUF_COLS-1) {
-            p->bits_col_idx = BITBUF_COLS-1;
-//            fprintf(stderr, "p->bits_col_idx>%i!\n", BITBUF_COLS-1);
-        }
-    }
-    p->bits_per_row[p->bit_rows]++;
-}
-
-static void demod_next_bits_packet(struct protocol_state* p) {
-    p->bits_col_idx = 0;
-    p->bits_row_idx++;
-    p->bits_bit_col_idx = 7;
-    if (p->bits_row_idx>BITBUF_ROWS-1) {
-        p->bits_row_idx = BITBUF_ROWS-1;
-        //fprintf(stderr, "p->bits_row_idx>%i!\n", BITBUF_ROWS-1);
-    }
-    p->bit_rows++;
-    if (p->bit_rows > BITBUF_ROWS-1)
-        p->bit_rows -=1;
-}
-
-static void demod_print_bits_packet(struct protocol_state* p) {
-    int i,j,k;
-
-    fprintf(stderr, "\n");
-    for (i=0 ; i<p->bit_rows+1 ; i++) {
-        fprintf(stderr, "[%02d] {%d} ",i, p->bits_per_row[i]);
-        for (j=0 ; j<((p->bits_per_row[i]+8)/8) ; j++) {
-	        fprintf(stderr, "%02x ", p->bits_buffer[i][j]);
-        }
-        fprintf(stderr, ": ");
-        for (j=0 ; j<((p->bits_per_row[i]+8)/8) ; j++) {
-            for (k=7 ; k>=0 ; k--) {
-                if (p->bits_buffer[i][j] & 1<<k)
-                    fprintf(stderr, "1");
-                else
-                    fprintf(stderr, "0");
-            }
-//            fprintf(stderr, "=0x%x ",demod->bits_buffer[i][j]);
-            fprintf(stderr, " ");
-        }
-        fprintf(stderr, "\n");
-    }
-    fprintf(stderr, "\n");
-    return;
-}
-
-static void register_protocol(struct dm_state *demod, r_device *t_dev) {
-    struct protocol_state *p =  calloc(1,sizeof(struct protocol_state));
-    p->short_limit  = (float)t_dev->short_limit/((float)DEFAULT_SAMPLE_RATE/(float)samp_rate);
-    p->long_limit   = (float)t_dev->long_limit /((float)DEFAULT_SAMPLE_RATE/(float)samp_rate);
-    p->reset_limit  = (float)t_dev->reset_limit/((float)DEFAULT_SAMPLE_RATE/(float)samp_rate);
-    p->modulation   = t_dev->modulation;
-    p->callback     = t_dev->json_callback;
-    demod_reset_bits_packet(p);
-
-    demod->r_devs[demod->r_dev_num] = p;
-    demod->r_dev_num++;
-
-    fprintf(stderr, "Registering protocol[%02d] %s\n",demod->r_dev_num, t_dev->name);
-
-    if (demod->r_dev_num > MAX_PROTOCOLS)
-        fprintf(stderr, "Max number of protocols reached %d\n",MAX_PROTOCOLS);
-}
-
 
 static unsigned int counter = 0;
 static unsigned int print = 1;
@@ -1054,7 +567,6 @@ static unsigned int signal_start = 0;
 static unsigned int signal_end   = 0;
 static unsigned int signal_pulse_data[4000][3] = {{0}};
 static unsigned int signal_pulse_counter = 0;
-
 
 static void classify_signal() {
     unsigned int i,k, max=0, min=1000000, t;
@@ -1275,7 +787,6 @@ fprintf(stderr, "[%03d] s: %d\t  e:\t %d\t l:%d\t  d:%d\n",
 
 };
 
-
 static void pwm_analyze(struct dm_state *demod, int16_t *buf, uint32_t len)
 {
     unsigned int i;
@@ -1370,213 +881,12 @@ static void pwm_analyze(struct dm_state *demod, int16_t *buf, uint32_t len)
                 signal_start = 0;
             }
         }
-
-
     }
     return;
-
 err:
     fprintf(stderr, "To many pulses detected, probably bad input data or input parameters\n");
     return;
 }
-
-/* The distance between pulses decodes into bits */
-
-static void pwm_d_decode(struct dm_state *demod, struct protocol_state* p, int16_t *buf, uint32_t len) {
-    unsigned int i;
-
-    for (i=0 ; i<len ; i++) {
-        if (buf[i] > demod->level_limit) {
-            p->pulse_count = 1;
-            p->start_c = 1;
-        }
-        if (p->pulse_count && (buf[i] < demod->level_limit)) {
-            p->pulse_length = 0;
-            p->pulse_distance = 1;
-            p->sample_counter = 0;
-            p->pulse_count = 0;
-        }
-        if (p->start_c) p->sample_counter++;
-        if (p->pulse_distance && (buf[i] > demod->level_limit)) {
-            if (p->sample_counter < p->short_limit) {
-                demod_add_bit(p, 0);
-            } else if (p->sample_counter < p->long_limit) {
-                demod_add_bit(p, 1);
-            } else {
-                demod_next_bits_packet(p);
-                p->pulse_count    = 0;
-                p->sample_counter = 0;
-            }
-            p->pulse_distance = 0;
-        }
-        if (p->sample_counter > p->reset_limit) {
-            p->start_c    = 0;
-            p->sample_counter = 0;
-            p->pulse_distance = 0;
-            if (p->callback)
-                events+=p->callback(p->bits_buffer);
-            else
-                demod_print_bits_packet(p);
-
-            demod_reset_bits_packet(p);
-        }
-    }
-}
-
-/* The length of pulses decodes into bits */
-
-static void pwm_p_decode(struct dm_state *demod, struct protocol_state* p, int16_t *buf, uint32_t len) {
-    unsigned int i;
-
-    for (i=0 ; i<len ; i++) {
-        if (buf[i] > demod->level_limit && !p->start_bit) {
-            /* start bit detected */
-            p->start_bit      = 1;
-            p->start_c        = 1;
-            p->sample_counter = 0;
-//            fprintf(stderr, "start bit pulse start detected\n");
-        }
-
-        if (!p->real_bits && p->start_bit && (buf[i] < demod->level_limit)) {
-            /* end of startbit */
-            p->real_bits = 1;
-//            fprintf(stderr, "start bit pulse end detected\n");
-        }
-        if (p->start_c) p->sample_counter++;
-
-
-        if (!p->pulse_start && p->real_bits && (buf[i] > demod->level_limit)) {
-            /* save the pulse start, it will never be zero */
-            p->pulse_start = p->sample_counter;
-//           fprintf(stderr, "real bit pulse start detected\n");
-
-        }
-
-        if (p->real_bits && p->pulse_start && (buf[i] < demod->level_limit)) {
-            /* end of pulse */
-
-            p->pulse_length = p->sample_counter-p->pulse_start;
-//           fprintf(stderr, "real bit pulse end detected %d\n", p->pulse_length);
-//           fprintf(stderr, "space duration %d\n", p->sample_counter);
-
-            if (p->pulse_length <= p->short_limit) {
-                demod_add_bit(p, 1);
-            } else if (p->pulse_length > p->short_limit) {
-                demod_add_bit(p, 0);
-            }
-            p->sample_counter = 0;
-            p->pulse_start    = 0;
-        }
-
-        if (p->real_bits && p->sample_counter > p->long_limit) {
-            demod_next_bits_packet(p);
-
-            p->start_bit = 0;
-            p->real_bits = 0;
-        }
-
-        if (p->sample_counter > p->reset_limit) {
-            p->start_c = 0;
-            p->sample_counter = 0;
-            //demod_print_bits_packet(p);
-            if (p->callback)
-                events+=p->callback(p->bits_buffer);
-            else
-                demod_print_bits_packet(p);
-            demod_reset_bits_packet(p);
-
-            p->start_bit = 0;
-            p->real_bits = 0;
-        }
-    }
-}
-
-/*  Machester Decode for Oregon Scientific Weather Sensors
-   Decode data streams sent by Oregon Scientific v2.1, and v3 weather sensors.  
-   With manchester encoding, both the pulse width and pulse distance vary.  Clock sync
-   is recovered from the data stream based on pulse widths and distances exceeding a 
-   minimum threashold (short limit* 1.5). 
- */
-static void manchester_decode(struct dm_state *demod, struct protocol_state* p, int16_t *buf, uint32_t len) {
-    unsigned int i;
-
-	if (p->sample_counter == 0)
-	    p->sample_counter = p->short_limit*2;
-		
-    for (i=0 ; i<len ; i++) {
-	
-	    if (p->start_c) 
-		    p->sample_counter++; /* For this decode type, sample counter is count since last data bit recorded */			
-
-        if (!p->pulse_count && (buf[i] > demod->level_limit)) { /* Pulse start (rising edge) */
-            p->pulse_count = 1;
-			if (p->sample_counter  > (p->short_limit + (p->short_limit>>1))) {
-			   /* Last bit was recorded more than short_limit*1.5 samples ago */
-			   /* so this pulse start must be a data edge (rising data edge means bit = 0) */
-               demod_add_bit(p, 0);			   
-			   p->sample_counter=1;
-			   p->start_c++; // start_c counts number of bits received
-			}
-        }
-        if (p->pulse_count && (buf[i] <= demod->level_limit)) { /* Pulse end (falling edge) */
-		    if (p->sample_counter > (p->short_limit + (p->short_limit>>1))) {
-		       /* Last bit was recorded more than "short_limit*1.5" samples ago */
-			   /* so this pulse end is a data edge (falling data edge means bit = 1) */
-               demod_add_bit(p, 1);				   
-			   p->sample_counter=1;
-			   p->start_c++;
-			}
-            p->pulse_count = 0;
-        }
-
-        if (p->sample_counter > p->reset_limit) {
-	//fprintf(stderr, "manchester_decode number of bits received=%d\n",p->start_c); 
-		   if (p->callback)
-              events+=p->callback(p->bits_buffer);
-           else
-              demod_print_bits_packet(p);
-			demod_reset_bits_packet(p);
-	        p->sample_counter = p->short_limit*2;
-			p->start_c = 0;
-        }
-    }
-}
-
-/** Something that might look like a IIR lowpass filter
- *
- *  [b,a] = butter(1, 0.01) ->  quantizes nicely thus suitable for fixed point
- *  Q1.15*Q15.0 = Q16.15
- *  Q16.15>>1 = Q15.14
- *  Q15.14 + Q15.14 + Q15.14 could possibly overflow to 17.14
- *  but the b coeffs are small so it wont happen
- *  Q15.14>>14 = Q15.0 \o/
- */
-
-static uint16_t lp_xmem[FILTER_ORDER] = {0};
-
-#define F_SCALE 15
-#define S_CONST (1<<F_SCALE)
-#define FIX(x) ((int)(x*S_CONST))
-
-int a[FILTER_ORDER+1] = {FIX(1.00000),FIX(0.96907)};
-int b[FILTER_ORDER+1] = {FIX(0.015466),FIX(0.015466)};
-
-static void low_pass_filter(uint16_t *x_buf, int16_t *y_buf, uint32_t len)
-{
-    unsigned int i;
-
-    /* Calculate first sample */
-    y_buf[0] = ((a[1]*y_buf[-1]>>1) + (b[0]*x_buf[0]>>1) + (b[1]*lp_xmem[0]>>1)) >> (F_SCALE-1);
-    for (i=1 ; i<len ; i++) {
-        y_buf[i] = ((a[1]*y_buf[i-1]>>1) + (b[0]*x_buf[i]>>1) + (b[1]*x_buf[i-1]>>1)) >> (F_SCALE-1);
-    }
-
-    /* Save last sample */
-    memcpy(lp_xmem, &x_buf[len-1-FILTER_ORDER], FILTER_ORDER*sizeof(int16_t));
-    memcpy(&y_buf[-FILTER_ORDER], &y_buf[len-1-FILTER_ORDER], FILTER_ORDER*sizeof(int16_t));
-    //fprintf(stderr, "%d\n", y_buf[0]);
-}
-
 
 static void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx)
 {
@@ -1584,12 +894,12 @@ static void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx)
     uint16_t* sbuf = (uint16_t*) buf;
     int i;
     if (demod->file || !demod->save_data) {
-        if (do_exit || do_exit_async)
+        if (rtlsdr_do_exit)
             return;
 
         if ((bytes_to_read > 0) && (bytes_to_read < len)) {
             len = bytes_to_read;
-            do_exit = 1;
+            rtlsdr_do_exit = 1;
             rtlsdr_cancel_async(dev);
         }
 
@@ -1604,8 +914,8 @@ static void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx)
 
 
         if (demod->debug_mode == 0) {
-            envelope_detect(buf, len, demod->decimation_level);
-            low_pass_filter(sbuf, demod->f_buf, len>>(demod->decimation_level+1));
+	    uint16_t *envelope_buf = envelope_detect(buf, len, demod->decimation_level);
+            low_pass_filter(envelope_buf, demod->f_buf, len>>(demod->decimation_level+1));
         } else if (demod->debug_mode == 1){
             memcpy(demod->f_buf, buf, len);
         }
@@ -1623,7 +933,7 @@ static void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx)
                     case OOK_MANCHESTER:
                         manchester_decode(demod, demod->r_devs[i], demod->f_buf, len/2);
                         break;
-					default:
+		    default:
                         fprintf(stderr, "Unknown modulation %d in protocol!\n", demod->r_devs[i]->modulation);
                 }
             }
@@ -1645,14 +955,14 @@ static void rtlsdr_callback(unsigned char *buf, uint32_t len, void *ctx)
             if(difftime(rawtime, rawtime_old)>DEFAULT_HOP_TIME || events>=DEFAULT_HOP_EVENTS) {
                 rawtime_old=rawtime;
                 events=0;
-                do_exit_async=1;
+                rtlsdr_do_exit=1;
                 rtlsdr_cancel_async(dev);
             }
         }
     }
 }
 
-int rtl_433_main(int argc, char **argv)
+static int rtl_433_main(int argc, char **argv)
 {
 #ifndef _WIN32
     struct sigaction sigact;
@@ -1669,11 +979,13 @@ int rtl_433_main(int argc, char **argv)
     uint8_t *buffer;
     uint32_t dev_index = 0;
     int frequency_current=0;
-    uint32_t out_block_size = DEFAULT_BUF_LENGTH;
+    uint32_t out_block_size = R433_DEFAULT_BUF_LENGTH;
+    uint32_t samp_rate=DEFAULT_SAMPLE_RATE;
     int device_count;
     char vendor[256], product[256], serial[256];
 
     demod = malloc(sizeof(struct dm_state));
+    rtl_433_demod = demod;
     memset(demod,0,sizeof(struct dm_state));
 
     /* initialize tables */
@@ -1682,7 +994,6 @@ int rtl_433_main(int argc, char **argv)
     demod->f_buf = &demod->filter_buffer[FILTER_ORDER];
     demod->decimation_level = DEFAULT_DECIMATION_LEVEL;
     demod->level_limit      = DEFAULT_LEVEL_LIMIT;
-
 
     while ((opt = getopt(argc, argv, "x:z:p:Dtam:r:c:l:d:f:g:s:b:n:S::")) != -1) {
         switch (opt) {
@@ -1745,32 +1056,32 @@ int rtl_433_main(int argc, char **argv)
     }
 
     /* init protocols somewhat ok */
-//    register_protocol(demod, &rubicson);
-//    register_protocol(demod, &prologue);
-//    register_protocol(demod, &silvercrest);
-//    register_protocol(demod, &generic_hx2262);
-//    register_protocol(demod, &technoline_ws9118);
-//    register_protocol(demod, &elv_em1000);
-//    register_protocol(demod, &elv_ws2000);
-//    register_protocol(demod, &waveman);
-//    register_protocol(demod, &steffen);
-//    register_protocol(demod, &acurite_rain_gauge);
-   register_protocol(demod, &oregon_scientific);
+//    register_protocol(demod, &rubicson, samp_rate);
+//    register_protocol(demod, &prologue, samp_rate);
+//    register_protocol(demod, &silvercrest, samp_rate);
+//    register_protocol(demod, &generic_hx2262, samp_rate);
+//    register_protocol(demod, &technoline_ws9118, samp_rate);
+//    register_protocol(demod, &elv_em1000, samp_rate);
+//    register_protocol(demod, &elv_ws2000, samp_rate);
+//    register_protocol(demod, &waveman, samp_rate);
+//    register_protocol(demod, &steffen, samp_rate);
+//    register_protocol(demod, &acurite_rain_gauge, samp_rate);
+   register_protocol(demod, &oregon_scientific, samp_rate);
 
     if (argc <= optind-1) {
         usage();
     } else {
         filename = argv[optind];
     }
-    if(out_block_size < MINIMAL_BUF_LENGTH ||
-       out_block_size > MAXIMAL_BUF_LENGTH ){
+    if(out_block_size < MINIMAL_R433_BUF_LENGTH ||
+       out_block_size > MAXIMAL_R433_BUF_LENGTH ){
         fprintf(stderr,
             "Output block size wrong value, falling back to default\n");
         fprintf(stderr,
-            "Minimal length: %u\n", MINIMAL_BUF_LENGTH);
+            "Minimal length: %u\n", MINIMAL_R433_BUF_LENGTH);
         fprintf(stderr,
-            "Maximal length: %u\n", MAXIMAL_BUF_LENGTH);
-        out_block_size = DEFAULT_BUF_LENGTH;
+            "Maximal length: %u\n", MAXIMAL_R433_BUF_LENGTH);
+        out_block_size = R433_DEFAULT_BUF_LENGTH;
     }
     buffer = malloc(out_block_size * sizeof(uint8_t));
     device_count = rtlsdr_get_device_count();
@@ -1861,7 +1172,7 @@ int rtl_433_main(int argc, char **argv)
 
     if (test_mode_file) {
         int i = 0;
-        unsigned char test_mode_buf[DEFAULT_BUF_LENGTH];
+        unsigned char test_mode_buf[R433_DEFAULT_BUF_LENGTH];
         fprintf(stderr, "Test mode active. Reading samples from file: %s\n",test_mode_file);
         test_mode = fopen(test_mode_file, "r");
         if (!test_mode) {
@@ -1876,8 +1187,8 @@ int rtl_433_main(int argc, char **argv)
         classify_signal();
         fprintf(stderr, "Test mode file issued %d packets\n", i);
         fprintf(stderr, "Filter coeffs used:\n");
-        fprintf(stderr, "a: %d %d\n", a[0], a[1]);
-        fprintf(stderr, "b: %d %d\n", b[0], b[1]);
+        fprintf(stderr, "a: %d %d\n", rtl_433_a[0], rtl_433_a[1]);
+        fprintf(stderr, "b: %d %d\n", rtl_433_b[0], rtl_433_b[1]);
         exit(0);
     }
 
@@ -1888,7 +1199,7 @@ int rtl_433_main(int argc, char **argv)
 
     if (sync_mode) {
         fprintf(stderr, "Reading samples in sync mode...\n");
-        while (!do_exit) {
+        while (!rtlsdr_do_exit) {
             r = rtlsdr_read_sync(dev, buffer, out_block_size, &n_read);
             if (r < 0) {
                 fprintf(stderr, "WARNING: sync read failed.\n");
@@ -1897,7 +1208,7 @@ int rtl_433_main(int argc, char **argv)
 
             if ((bytes_to_read > 0) && (bytes_to_read < (uint32_t)n_read)) {
                 n_read = bytes_to_read;
-                do_exit = 1;
+                rtlsdr_do_exit = 1;
             }
 
             if (fwrite(buffer, 1, n_read, demod->file) != (size_t)n_read) {
@@ -1921,7 +1232,7 @@ int rtl_433_main(int argc, char **argv)
           time(&rawtime_old);
         }
         fprintf(stderr, "Reading samples in async mode...\n");
-        while(!do_exit) {
+        while(!rtlsdr_do_exit) {
             /* Set the frequency */
             r = rtlsdr_set_center_freq(dev, frequency[frequency_current]);
             if (r < 0)
@@ -1930,13 +1241,12 @@ int rtl_433_main(int argc, char **argv)
                 fprintf(stderr, "Tuned to %u Hz.\n", rtlsdr_get_center_freq(dev));
             r = rtlsdr_read_async(dev, rtlsdr_callback, (void *)demod,
                           DEFAULT_ASYNC_BUF_NUMBER, out_block_size);
-            do_exit_async=0;
             frequency_current++;
             if(frequency_current>frequencies-1) frequency_current=0;
         }
     }
 
-    if (do_exit)
+    if (rtlsdr_do_exit)
         fprintf(stderr, "\nUser cancel, exiting...\n");
     else
         fprintf(stderr, "\nLibrary error %d, exiting...\n", r);
@@ -1957,4 +1267,13 @@ int rtl_433_main(int argc, char **argv)
     free (buffer);
 out:
     return r >= 0 ? r : -r;
+}
+
+int main(int argc, char **argv) { 
+	// check if program invoked as rtl-433 or rtl-433-fm
+	if (argv[0][strlen(argv[0])-1] == 'm')
+		rtl_433fm_main(argc, argv);
+	else
+		rtl_433_main(argc, argv);
+	exit((int) 0);
 }

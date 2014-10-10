@@ -32,10 +32,11 @@
    THE COPYRIGHT HOLDERS OR CONTRIBUTORS ARE AWARE OF THE POSSIBILITY OF SUCH DAMAGE.
    
 ========================================================================*/
-
+#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <malloc.h>
+#include <limits.h>
 #include "rtl-wx.h"
 
 // This ring buffer is a bit strange since the insert operation behaves exactly like a ring buffer, but there is no remove
@@ -89,6 +90,9 @@ void WX_InitHistoricalMaxMinData(void)
 {
   memset(&minData, 0, sizeof(WX_Data));
   memset(&maxData, 0, sizeof(WX_Data));
+  
+  // This is a bit of a kludge, but reset max/min also resets the cumulative burner time time counter
+  WX_totalBurnerRunSeconds=0;
 }
 
 //--------------------------------------------------------------------------------------------------------------------------------------------
@@ -109,10 +113,20 @@ void WX_InitHistoricalRainData(int numberOfRainRecordsToStore)
   rainInIndex=0;
 }
 
+static int checkSensorForSnaphotTimeout(WX_Data *weatherDatap, WX_Timestamp *ts, int minutesPerSnapshot) {
+  long secondsSinceLastMessage = difftime(weatherDatap->currentTime.timet, ts->timet);
+  
+  // Only record timeout if sensor is active
+  if ((ts->PktCnt > 0) && (secondsSinceLastMessage >= (60*minutesPerSnapshot)))
+     return 1;
+  else
+     return 0;
+}
+
 //--------------------------------------------------------------------------------------------------------------------------------------------
 // Save a weather station dataset to the datastore by copying the contents into the ring buffer
 //--------------------------------------------------------------------------------------------------------------------------------------------
-void WX_SaveWeatherDataRecord(WX_Data *weatherDatap)
+void WX_SaveWeatherDataRecord(WX_Data *weatherDatap, WX_ConfigSettings *cVarp, int minutesPerSnapshot)
 {
   if (ringBuffer == (WX_Data *) 0) {
    DPRINTF("WX_SaveWeatherData called before initialization\n");
@@ -122,46 +136,130 @@ void WX_SaveWeatherDataRecord(WX_Data *weatherDatap)
   updateMinData(weatherDatap);
   updateMaxData(weatherDatap);
   
-  if ((weatherDatap->idu.Timestamp.PktCnt != 0) &&
-      ((weatherDatap->idu.Timestamp.PktCnt+100) < weatherDatap->currentTime.PktCnt))
+  if (checkSensorForSnaphotTimeout(weatherDatap, &weatherDatap->idu.Timestamp, minutesPerSnapshot))
       weatherDatap->idu.noDataBetweenSnapshots++;
-  if ((weatherDatap->odu.Timestamp.PktCnt != 0) &&
-      ((weatherDatap->odu.Timestamp.PktCnt+100) < weatherDatap->currentTime.PktCnt))
+  if (checkSensorForSnaphotTimeout(weatherDatap, &weatherDatap->odu.Timestamp, minutesPerSnapshot))
       weatherDatap->odu.noDataBetweenSnapshots++;
-  if ((weatherDatap->rg.Timestamp.PktCnt != 0) &&
-      ((weatherDatap->rg.Timestamp.PktCnt+100) < weatherDatap->currentTime.PktCnt))
+  if (checkSensorForSnaphotTimeout(weatherDatap, &weatherDatap->rg.Timestamp, minutesPerSnapshot))
       weatherDatap->rg.noDataBetweenSnapshots++;
-  if ((weatherDatap->wg.Timestamp.PktCnt != 0) &&
-      ((weatherDatap->wg.Timestamp.PktCnt+100) < weatherDatap->currentTime.PktCnt))
+  if (checkSensorForSnaphotTimeout(weatherDatap, &weatherDatap->wg.Timestamp, minutesPerSnapshot))
       weatherDatap->wg.noDataBetweenSnapshots++;
-      
+   
   int i;
   for(i=0;i<=MAX_SENSOR_CHANNEL_INDEX;i++) {
-    if ((weatherDatap->ext[i].Timestamp.PktCnt != 0) &&
-       ((weatherDatap->ext[i].Timestamp.PktCnt+100) < weatherDatap->currentTime.PktCnt))
+    if (checkSensorForSnaphotTimeout(weatherDatap, &weatherDatap->ext[i].Timestamp, minutesPerSnapshot))
         weatherDatap->ext[i].noDataBetweenSnapshots++;
-       wxData.ext[i].noDataBetweenSnapshots = 0;
-  } 
+  }  
+ 
+  if (weatherDatap->energy.Timestamp.PktCnt != 0) {
+      if (checkSensorForSnaphotTimeout(weatherDatap, &weatherDatap->energy.Timestamp, minutesPerSnapshot)) {
+          weatherDatap->energy.noDataBetweenSnapshots++;
+	  weatherDatap->energy.WattsAvg = 0;
+	  weatherDatap->energy.BurnerRuntimeSeconds = 0;
+      } else {
+	  // Compute wattsAvg for this sample before saving off snapshot
+          int i;
+	  int wattsSum=0; int wattsCount=0;
+	  for (i=0;i<ENERGY_HISTORY_SAMPLES_PER_SNAPSHOT;i++) {
+	    if (weatherDatap->energy.WattsHistory[i] != 0) {
+		wattsSum += weatherDatap->energy.WattsHistory[i];
+		wattsCount++;
+	    }
+	  }
+	  if (wattsCount != 0)
+	     weatherDatap->energy.WattsAvg = wattsSum/wattsCount;
+	  else
+	     weatherDatap->energy.WattsAvg = 0;
+      }
+  }
+  if (weatherDatap->owl.Timestamp.PktCnt != 0) {
+      if (checkSensorForSnaphotTimeout(weatherDatap, &weatherDatap->owl.Timestamp, minutesPerSnapshot)) {
+          weatherDatap->owl.noDataBetweenSnapshots++;
+	  weatherDatap->owl.WattsAvg = 0;
+	  weatherDatap->owl.BurnerRuntimeSeconds = 0;
+      } else {
+	  // Compute wattsAvg and possibly "burner on time" for this sample before saving off the snapshot data
+	  // Burner on time is an optional feature that works by having a dedicated OWL energy sensor on the oil/gas burner electric circuit
+	  // If the wattage reported on that circuit is above a user configurable threshold, it is assumed that the burner is running and if the wattage
+	  // is below that threshold it is assumed that the burner is off.  The logic below attempts to determine the total amount of time (in seconds)
+	  // that the burner was running during the snapshot. 
+          int i;
+	  int wattsSum=0; int wattsCount=0;
+	  int burnerRuntime=0; int burnerOnStartTime=0;
+	  int secondsPerSample=(60/OWL_ENERGY_HISTORY_SAMPLES_PER_MINUTE);
+	  int burnerOnThreshold=cVarp->fuelBurnerOnWattageThreshold;
+	  if (burnerOnThreshold==0) 
+		burnerOnThreshold=INT_MAX;
+	  int foundSampleWithBurnerOff=0;
+	  for (i=0;i<ENERGY_HISTORY_SAMPLES_PER_SNAPSHOT;i++) {
+	    if (weatherDatap->owl.WattsHistory[i] != 0) {
+		wattsSum += weatherDatap->owl.WattsHistory[i];
+		wattsCount++;
+		if (weatherDatap->owl.WattsHistory[i] <= burnerOnThreshold)
+		   foundSampleWithBurnerOff=1;
+		if (weatherDatap->owl.WattsHistory[i] > burnerOnThreshold) {
+		   if (burnerOnStartTime == 0)
+		      if (foundSampleWithBurnerOff == 1)
+		         burnerOnStartTime = (i * secondsPerSample)+1;
+		      else
+		         burnerOnStartTime = 1;
+		} else if (burnerOnStartTime != 0) {
+		   burnerRuntime += ((i*secondsPerSample) - burnerOnStartTime);
+		   burnerOnStartTime = 0;
+		} 
+	    }
+	  }
+	  if (burnerOnStartTime != 0)
+	     burnerRuntime += ((ENERGY_HISTORY_SAMPLES_PER_SNAPSHOT*secondsPerSample) - burnerOnStartTime);
+	  if (wattsCount != 0)
+	     weatherDatap->owl.WattsAvg = wattsSum/wattsCount;
+	  else
+	     weatherDatap->owl.WattsAvg = 0;
+	  weatherDatap->owl.BurnerRuntimeSeconds = burnerRuntime;
+	  WX_totalBurnerRunSeconds += burnerRuntime;
+
+      }
+  }
   
-  if ((weatherDatap->idu.Timestamp.PktCnt != 0) &&
-      ((weatherDatap->idu.Timestamp.PktCnt+100) < weatherDatap->currentTime.PktCnt))
-      weatherDatap->idu.noDataBetweenSnapshots++; 
-               
   // If current record has no new data at all (no pkts from any sensor), save an empty data record instead
   if (weatherDatap->currentTime.PktCnt == pktCntAtLastSnapshot) {
     memset(&ringBuffer[inIndex], 0, sizeof(WX_Data));
     ringBuffer[inIndex].currentTime = weatherDatap->currentTime;
-    DPRINTF("Warning: No weather packets received between data snapshots\n");
+    DPRINTF("Warning: No sensor messages were received between data snapshots\n");
     weatherDatap->noDataBetweenSnapshots++;
   }
-  else 
-     ringBuffer[inIndex] = *weatherDatap; // Copy the entire weather data structure into the buffer
+  else {
+	ringBuffer[inIndex] = *weatherDatap; // Copy the entire weather data structure into the buffer
+	// Check if timestamp  wrapped into the next 15 minute interval before getting saved and if so, back it into the previous time interval
+	// This allows the sample start time to be reliably determined by using (localTime->tm_min % 15)
+	if (isTimestampPresent(&ringBuffer[inIndex].currentTime)) {
+		struct tm *localTime = localtime(&ringBuffer[inIndex].currentTime.timet);
+		if ((localTime->tm_min % 15) == 0) // If min is 00, 15, 30, or 45 
+			ringBuffer[inIndex].currentTime.timet -= 60; // subtract 60 seconds from timestamp
+	}
+  }
   inIndex++;
   if ( inIndex >= maxRecordCount )
      inIndex = 0;
 
   // Keep track of packet counter at time of snapshot
   pktCntAtLastSnapshot = weatherDatap->currentTime.PktCnt;
+  
+  // Clear out energy sensor data after snapshot is saved...
+  if (weatherDatap->energy.Timestamp.PktCnt != 0) {
+          int i;
+	  pthread_rwlock_wrlock(&energy_sample_array_rw_lock);
+	  for (i=0;i<ENERGY_HISTORY_SAMPLES_PER_SNAPSHOT;i++)
+	    weatherDatap->energy.WattsHistory[i] = 0;
+          pthread_rwlock_unlock(&energy_sample_array_rw_lock);
+  }
+  if (weatherDatap->owl.Timestamp.PktCnt != 0) {
+          int i;
+	  pthread_rwlock_wrlock(&energy_sample_array_rw_lock);
+	  for (i=0;i<ENERGY_HISTORY_SAMPLES_PER_SNAPSHOT;i++)
+	    weatherDatap->owl.WattsHistory[i] = 0;
+          pthread_rwlock_unlock(&energy_sample_array_rw_lock);
+  }  
 }
 
 //--------------------------------------------------------------------------------------------------------------------------------------------
@@ -306,6 +404,22 @@ int isNewIntLower(int newxData, WX_Timestamp *newTs, int minData, WX_Timestamp *
    else
      return (FALSE);
 }
+int getLowestHistoryWatts(int historyArray[]) {
+   int i;
+   int lowest=0xffff;
+   for (i=0; i< ENERGY_HISTORY_SAMPLES_PER_SNAPSHOT;i++)
+      if ((historyArray[i] != 0) && (historyArray[i] < lowest))
+	lowest = historyArray[i];
+   return lowest;
+}
+int getHighestHistoryWatts(int historyArray[]) {
+   int i;
+   int highest=0;
+   for (i=0; i< ENERGY_HISTORY_SAMPLES_PER_SNAPSHOT;i++)
+      if (historyArray[i] > highest)
+	highest = historyArray[i];
+   return highest;
+}
 //--------------------------------------------------------------------------------------------------------------------------------------------
 // Given a new sample of weather station data, see if any of the historical min data values need to be updated.
 //--------------------------------------------------------------------------------------------------------------------------------------------
@@ -313,6 +427,23 @@ void updateMinData(WX_Data *datap)
 {
   int sensorIdx;
 
+  int lowestWatts = getLowestHistoryWatts(datap->energy.WattsHistory);
+  if (isNewIntLower(lowestWatts,  &datap->energy.Timestamp,
+                    minData.energy.Watts, &minData.energy.Timestamp) == TRUE) {
+    minData.energy.Watts = lowestWatts;
+    minData.energy.Timestamp = datap->energy.Timestamp;
+  }
+  lowestWatts = getLowestHistoryWatts(datap->owl.WattsHistory);
+  if (isNewIntLower(lowestWatts,  &datap->owl.Timestamp,
+                    minData.owl.Watts, &minData.owl.Timestamp) == TRUE) {
+    minData.owl.Watts = lowestWatts;
+    minData.owl.Timestamp = datap->owl.Timestamp;
+  } 
+  if (isNewIntLower(datap->owl.BurnerRuntimeSeconds,  &datap->owl.Timestamp,
+                    minData.owl.BurnerRuntimeSeconds, &minData.owl.Timestamp) == TRUE) {
+    minData.owl.BurnerRuntimeSeconds = datap->owl.BurnerRuntimeSeconds;
+    minData.owl.Timestamp = datap->owl.Timestamp;
+  }
   if (isNewFloatLower(datap->wg.Speed,  &datap->wg.SpeedTimestamp,
                     minData.wg.Speed, &minData.wg.SpeedTimestamp) == TRUE) {
     minData.wg.Speed = datap->wg.Speed;
@@ -413,6 +544,23 @@ void updateMaxData(WX_Data *datap)
 {
  int sensorIdx;
 
+  int highestWatts = getHighestHistoryWatts(datap->energy.WattsHistory);
+  if (isNewIntHigher(highestWatts,  &datap->energy.Timestamp,
+                    maxData.energy.Watts, &maxData.energy.Timestamp) == TRUE) {
+    maxData.energy.Watts = highestWatts;
+    maxData.energy.Timestamp = datap->energy.Timestamp;
+  }
+  highestWatts = getHighestHistoryWatts(datap->owl.WattsHistory);
+  if (isNewIntHigher(highestWatts,  &datap->owl.Timestamp,
+                    maxData.owl.Watts, &maxData.owl.Timestamp) == TRUE) {
+    maxData.owl.Watts = highestWatts;
+    maxData.owl.Timestamp = datap->owl.Timestamp;
+  }
+  if (isNewIntHigher(datap->owl.BurnerRuntimeSeconds,  &datap->owl.Timestamp,
+                    maxData.owl.BurnerRuntimeSeconds, &maxData.owl.Timestamp) == TRUE) {
+    maxData.owl.BurnerRuntimeSeconds = datap->owl.BurnerRuntimeSeconds;
+    maxData.owl.Timestamp = datap->owl.Timestamp;
+  }   
  if (isNewFloatHigher(datap->wg.Speed,  &datap->wg.SpeedTimestamp,
                     maxData.wg.Speed, &maxData.wg.SpeedTimestamp) == TRUE) {
     maxData.wg.Speed = datap->wg.Speed;
@@ -482,6 +630,156 @@ void updateMaxData(WX_Data *datap)
   } 
  }
 }
+
+void appendLineToCsvFile(char *fname, char *header_line, char *lineToAppend) {
+   FILE *fd;
+   
+   // First test if file exists.  If it doesn't, create file and write header
+   if ((fd = fopen(fname, "r")) == NULL) {
+     if ((fd = fopen(fname, "w")) == NULL) {
+      fprintf(stderr,"RTL-Wx: Unable to open %s file for writing.  Exiting...\n\n", fname);
+      exit(1);     
+     } else {
+      fprintf(fd, header_line);
+      fclose(fd);
+     }
+   }
+   else
+      fclose(fd);
+      
+   if ((fd = fopen(fname, "a")) == NULL) {
+      fprintf(stderr,"RTL-Wx: Unable to open %s file for appending.  Exiting...\n\n", fname);
+      exit(1);     
+     } 
+     
+   fprintf(fd, lineToAppend);
+   fclose(fd);  
+}
+
+// Append a line of sensor data to a CSV file by combining info from one or more saved data records
+// numSamplesToInclude determines the time interval represented by each csv line.  (eg num samples of 1=15minutes, 4=1 hour, 16=4 hours, 96=1 day --> assuming 15 minutes per sample snapshot)
+void WX_WriteSensorDataToCSVFile(char *csvFilename, WX_Data *weatherDatap, WX_ConfigSettings *cVarp, int numSamplesToInclude) {
+   int efergySamples=0; int efergyWattsAvg=0; 
+   int owlSamples=0; int owlWattsAvg=0; int burnerRuntimeSeconds=0; 
+   int iduSamples=0; float iduTemp=0; float iduDewpoint=0; float iduSealevelPressure=0;
+   int oduSamples=0; float oduTemp=0; float oduDewpoint=0;
+   int extraSensorSamples[EXTRA_SENSOR_ARRAY_SIZE]; float extraSensorTemp[EXTRA_SENSOR_ARRAY_SIZE]; float extraSensorDewpoint[EXTRA_SENSOR_ARRAY_SIZE];
+   
+   int sensor, sample;
+   for(sensor=0; sensor < EXTRA_SENSOR_ARRAY_SIZE; sensor++) {
+      extraSensorSamples[sensor] = 0;
+      extraSensorTemp[sensor] = 0;
+      extraSensorDewpoint[sensor] = 0;      
+   }
+  
+   for (sample=1;sample<=numSamplesToInclude;sample++) {
+      WX_Data *wxDatap = WX_GetWeatherDataRecord(sample);
+      if (wxDatap != NULL) {
+         if (isTimestampPresent(&wxDatap->energy.Timestamp)) {
+	   efergyWattsAvg += wxDatap->energy.WattsAvg;
+	   burnerRuntimeSeconds += wxDatap->energy.BurnerRuntimeSeconds; // Update this for either sensor (only one will have data)
+	   efergySamples++;
+	 }
+         if (isTimestampPresent(&wxDatap->owl.Timestamp)) {
+	   owlWattsAvg += wxDatap->owl.WattsAvg;
+	   burnerRuntimeSeconds += wxDatap->owl.BurnerRuntimeSeconds; 
+	   owlSamples++;
+	 }
+         if (isTimestampPresent(&wxDatap->idu.Timestamp)) {
+	   iduTemp += wxDatap->idu.Temp;
+	   iduDewpoint += wxDatap->idu.Dewpoint;
+	   iduSealevelPressure += ((wxDatap->idu.Pressure+wxDatap->idu.SeaLevelOffset)/33.8638866667);
+	   iduSamples++;
+	 }
+         if (isTimestampPresent(&wxDatap->odu.Timestamp)) {
+	   oduTemp += wxDatap->odu.Temp;
+	   oduDewpoint += wxDatap->odu.Dewpoint;
+	   oduSamples++;
+	 }	 
+         for(sensor=0; sensor < EXTRA_SENSOR_ARRAY_SIZE; sensor++)
+            if (isTimestampPresent(&wxDatap->ext[sensor].Timestamp)) {
+               extraSensorTemp[sensor] += wxDatap->ext[sensor].Temp;
+               extraSensorDewpoint[sensor] += wxDatap->ext[sensor].Dewpoint;      
+               extraSensorSamples[sensor] ++;      
+            }
+	}
+   }
+   
+   if (efergySamples > 1)
+     efergyWattsAvg /= efergySamples;
+   if (owlSamples > 1)
+     owlWattsAvg /= owlSamples;	 
+   if (iduSamples > 0) {
+      iduTemp = (iduTemp/iduSamples)*1.8+32;
+      iduDewpoint = (iduDewpoint/iduSamples)*1.8+32;
+      iduSealevelPressure /= iduSamples;
+   }
+   if (oduSamples > 0) {
+      oduTemp = (oduTemp/oduSamples)*1.8+32;
+      oduDewpoint = (oduDewpoint/oduSamples)*1.8+32;
+   }
+   for(sensor=0; sensor < EXTRA_SENSOR_ARRAY_SIZE; sensor++)
+     if (extraSensorSamples[sensor] > 0) {
+      extraSensorTemp[sensor] = (extraSensorTemp[sensor]/extraSensorSamples[sensor])*1.8+32;
+      extraSensorDewpoint[sensor] = (extraSensorDewpoint[sensor]/extraSensorSamples[sensor])*1.8+32;
+     }
+     
+   char lineToAppend[500];
+   time_t timestamp = time(NULL);
+   //                                                     time efergy owl  fuel       odu                          idu                          ext1                        ext2                         ext3                       ext4                         pressure
+   sprintf(lineToAppend,"%lu,%d,%d,%4.2f,%3.1f,%3.1f,%3.1f,%3.1f,%3.1f,%3.1f,%3.1f,%3.1f,%3.1f,%3.1f,%3.1f,%3.1f,%5.2f\n", 
+      timestamp,efergyWattsAvg,owlWattsAvg,(float) burnerRuntimeSeconds/3600 * cVarp->fuelBurnerGallonsPerHour,
+      oduTemp,oduDewpoint,iduTemp,iduDewpoint,
+      extraSensorTemp[0],extraSensorDewpoint[0],extraSensorTemp[1],extraSensorDewpoint[1],
+      extraSensorTemp[2],extraSensorDewpoint[2],extraSensorTemp[3],extraSensorDewpoint[3],
+      iduSealevelPressure);
+   
+   appendLineToCsvFile(csvFilename, 
+     "Time,efergyWatts,owlWatts,fuelGallonsBurned,oduTemp,oduDewpoint,iduTemp,iduDewpoint,ext1Temp,ext1Dewpoint,ext2Temp,ext2Dewpoint,ext3Temp,ext3Dewpoint,ext4Temp,ext4Dewpoint,iduSealevelPressure\n",
+     lineToAppend);
+}
+
+// Create a single record CSV file with the latest sensor data
+void WX_WriteRealTimeCSVFile() {
+   int efergyWatts = wxData.energy.Watts;
+   int efergyWattsLastHour = getWattsAvgAvg(1, 4);
+   int efergyWattsLastDay  = getWattsAvgAvg(1, 24*4);
+
+   int owlWatts = wxData.owl.Watts;
+   int owlWattsLastHour = getWattsAvgAvg(0, 4);
+   int owlWattsLastDay = getWattsAvgAvg(0, 24*4);	 
+   
+   float fuelBurnedLastHour = (float) getBurnerRunSecondsTotal(0, 4) /(60*60) * WxConfig.fuelBurnerGallonsPerHour;
+   float fuelBurnedLastDay = (float) getBurnerRunSecondsTotal(0, 24*4) /(60*60) * WxConfig.fuelBurnerGallonsPerHour;
+   float fuelBurnedTotal = (float) WX_totalBurnerRunSeconds/(60*60) * WxConfig.fuelBurnerGallonsPerHour;
+	
+   char csvString[500];
+   time_t timestamp = time(NULL);
+   //                                             time  efergy               owl                   fuel                                         odu                          idu                          ext1                        ext2                         ext3                       ext4                         pressure
+   sprintf(csvString,"%lu,%d,%d,%d,%d,%d,%d,%4.2f,%4.2f,%4.2f,%3.1f,%3.1f,%3.1f,%3.1f,%3.1f,%3.1f,%3.1f,%3.1f,%3.1f,%3.1f,%3.1f,%3.1f,%5.2f\n", 
+      timestamp,
+      efergyWatts,efergyWattsLastHour,efergyWattsLastDay,
+      owlWatts,owlWattsLastHour,owlWattsLastDay, 
+      fuelBurnedLastHour,fuelBurnedLastDay,fuelBurnedTotal,
+      wxData.odu.Temp*1.8+32, wxData.odu.Dewpoint*1.8+32, 
+      wxData.idu.Temp*1.8+32, wxData.idu.Dewpoint*1.8+32, 
+      wxData.ext[0].Temp*1.8+32, wxData.ext[0].Dewpoint*1.8+32, 
+      wxData.ext[1].Temp*1.8+32, wxData.ext[1].Dewpoint*1.8+32, 
+      wxData.ext[2].Temp*1.8+32, wxData.ext[2].Dewpoint*1.8+32, 
+      wxData.ext[3].Temp*1.8+32, wxData.ext[3].Dewpoint*1.8+32, 
+      (wxData.idu.Pressure + wxData.idu.SeaLevelOffset)/33.8638866667);
+     
+   FILE *fd; 
+   char *fname = WxConfig.realtimeCsvFile;   
+   if ((fd = fopen(fname, "w+")) == NULL) {
+      fprintf(stderr,"RTL-Wx: Unable to open %s file for writing.  Exiting...\n\n", fname);
+      exit(1);     
+     } 
+   fprintf(fd,"Time,efergyWatts,efergyLastHr,efergyLastDay,owlWatts,owlLastHr,owlLastDay,fuelGallonsLastHr,fuelLastDay,fuelTotal,oduTemp,oduDewpoint,iduTemp,iduDewpoint,ext1Temp,ext1Dewpoint,ext2Temp,ext2Dewpoint,ext3Temp,ext3Dewpoint,ext4Temp,ext4Dewpoint,iduSealevelPressure\n");
+   fprintf(fd,csvString);
+   fclose(fd); 
+}
+
 
 
 

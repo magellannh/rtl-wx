@@ -55,6 +55,10 @@ WX_Data wxData;
 
 time_t WX_programStartTime;
 
+// Only used when OWL electricity sensor is connected to oil burner circuit
+// and fuelBurnerOnWattageThreshold is > 0 in config file
+long int WX_totalBurnerRunSeconds;
+
 // Misc defines used only by this module
 #define FALSE 0
 #define TRUE 1
@@ -75,6 +79,38 @@ static void WX_Init(void);
 // program is run in server mode.  The DPRINTF() macro automatically sends output to these file descriptor by default.
 FILE *outputfd=NULL;
 FILE *logfd=NULL;
+
+int rawxDataDumpMode = FALSE;
+extern void WX_process_os_msg_error(unsigned char *msg, int length);
+extern void WX_process_os_msg_ok(unsigned char *msg, int length, int sensor_id);
+extern void WX_process_efergy_msg_error(unsigned char *msg, int length);
+extern void WX_process_efergy_msg_ok(unsigned char *msg, int length, float kilowatts);
+extern void WX_process_owl_msg_error(unsigned char *msg, int length, float watts, float total_kwh);
+extern void WX_process_owl_msg_ok(unsigned char *msg, int length, float watts, float total_kwh);
+
+//  rtl_433_fm message receiver/decoder  routines
+extern void rtl_433fm_main(int argc, char **argv);
+extern void rtl_decode_register_os_msg_ok_callback(void (*callback_function)(unsigned char *, int, int));
+extern void rtl_decode_register_os_msg_error_callback(void (*callback_function)(unsigned char *, int));
+extern void rtl_decode_register_efergy_msg_ok_callback(void (*callback_function)(unsigned char *, int, float));
+extern void rtl_decode_register_efergy_msg_error_callback(void (*callback_function)(unsigned char *, int));
+extern void rtl_decode_register_owl_msg_ok_callback(void (*callback_function)(unsigned char *, int, float, float));
+extern void rtl_decode_register_owl_msg_error_callback(void (*callback_function)(unsigned char *, int, float, float));
+
+// Need lock for multi-threaded rw access to energy sample history in wxData structure
+pthread_rwlock_t energy_sample_array_rw_lock;
+
+// Create a thread to start  the rtl_433_fm message receiver
+pthread_t rtl_433fm_thread_struct;
+void *rtl_433fm_thread(void *param) {
+#ifdef ENABLE_EFERGY_SUPPORT
+  rtl_433fm_main(0, NULL);
+#else
+  init_rtl_433_for_rtlwx_without_rtlfm();
+#endif
+  fprintf(stderr,"RTL 433 FM Thread exited unexpectedly\n");
+  return NULL; 
+}
 
 //--------------------------------------------------------------------------------------------------------------------------------------------
 // MAIN() - Validate program input, configure i/o for user interaction, and invoke the correct main control loop
@@ -230,6 +266,14 @@ static void init_sensor_lock_and_timeout_info() {
   wxData.wg.LockCodeMismatchCount = 0;
   wxData.wg.noDataFor300Seconds = 0;
   wxData.wg.noDataBetweenSnapshots = 0;
+  wxData.energy.LockCode = -1;
+  wxData.energy.LockCodeMismatchCount = 0;
+  wxData.energy.noDataFor300Seconds = 0;
+  wxData.energy.noDataBetweenSnapshots = 0;
+  wxData.owl.LockCode = -1;
+  wxData.owl.LockCodeMismatchCount = 0;
+  wxData.owl.noDataFor300Seconds = 0;
+  wxData.owl.noDataBetweenSnapshots = 0;
   int i;
   for(i=0;i<=MAX_SENSOR_CHANNEL_INDEX;i++) {
     wxData.ext[i].LockCode = -1;
@@ -237,23 +281,6 @@ static void init_sensor_lock_and_timeout_info() {
     wxData.ext[i].noDataFor300Seconds = 0;
     wxData.ext[i].noDataBetweenSnapshots = 0;
   } 
-}
-
-int rawxDataDumpMode = FALSE;
-extern void WX_process_rtl_bad_pkt(unsigned char *msg);
-extern void WX_process_rtl_433_pkt(unsigned char *msg, int sensor_id);
-
-//  rtl_433 interface routines
-extern void rtl_433_main(int argc, char **argv);
-extern void rtl_433_register_os_bad_pkt_received_callback(void (*callback_function)(unsigned char *));
-extern void rtl_433_register_os_pkt_received_callback(void (*callback_function)(unsigned char *, int));
-
-pthread_t rtl_433_thread_struct;
-void *rtl_433_thread(void *param) {
-  char *argv[] = {"rtl_433","-f","433810000","-l","7000", NULL};
-  rtl_433_main(5, argv);
-  fprintf(stderr,"RTL 433 Thread exited unexpectedly\n");
-  return NULL; 
 }
 
 //--------------------------------------------------------------------------------------------------------------------------------------------
@@ -270,13 +297,16 @@ void runServerStandaloneLoop(int receiveDesc, FILE *outputfd)
   //  Init various data structures and modules such as WMR9x8 driver, scheduler, dataStore, etc
   WX_Init();
 
-  if(pthread_create(&rtl_433_thread_struct, NULL, rtl_433_thread, NULL)) {
+  if(pthread_create(&rtl_433fm_thread_struct, NULL, rtl_433fm_thread, NULL)) {
       fprintf(stderr, "Error creating rtl_433 receiver thread\n");
       exit(0);
-  } 
-  rtl_433_register_os_bad_pkt_received_callback(WX_process_rtl_bad_pkt);
-  rtl_433_register_os_pkt_received_callback(WX_process_rtl_433_pkt);
-
+  }  
+  rtl_decode_register_os_msg_error_callback(WX_process_os_msg_error);
+  rtl_decode_register_os_msg_ok_callback(WX_process_os_msg_ok);
+  rtl_decode_register_efergy_msg_error_callback(WX_process_efergy_msg_error);
+  rtl_decode_register_efergy_msg_ok_callback(WX_process_efergy_msg_ok); 
+  rtl_decode_register_owl_msg_error_callback(WX_process_owl_msg_error);
+  rtl_decode_register_owl_msg_ok_callback(WX_process_owl_msg_ok);   
   fprintf(outputfd, "Ready to gather weather sensor data \n");
   fprintf(outputfd,"\n   <<Hit 'h' for help, any key for status, ESC to quit>>\n\n");
   fflush(outputfd);
@@ -318,9 +348,13 @@ void runServerStandaloneLoop(int receiveDesc, FILE *outputfd)
           case 'd': 
             WX_DumpSensorInfo(outputfd);
             break;
+          case 'e': 
+            WX_DumpEnergyHistoryInfo(outputfd, "Efergy", &wxData.energy, ENERGY_HISTORY_SAMPLES_PER_MINUTE);
+	    WX_DumpEnergyHistoryInfo(outputfd, "OWL", &wxData.owl, OWL_ENERGY_HISTORY_SAMPLES_PER_MINUTE); 
+            break;
           case 'f': 
             DPRINTF("Executing user command to invoke tag file parser\n");
-                WX_DoTagFileProcessing();
+            WX_DoTagFileProcessing();
             break;
           case 'h':
             outputProgramHelp(outputfd);
@@ -350,7 +384,7 @@ void runServerStandaloneLoop(int receiveDesc, FILE *outputfd)
             break;
           case 's':
             DPRINTF("Executing user command to save data snapshot and rain snapshot\n");
-            WX_DoDataSnapshotSave();
+            WX_DoDataSnapshotSave(WxConfig.dataSnapshotFrequency);
             WX_DoRainDataSnapshotSave();
             break;
           case 't':
@@ -393,7 +427,11 @@ void WX_Init() {
   memset ( &WxConfig, 0, sizeof(WxConfig));
   
   time(&WX_programStartTime);
-   
+  
+  WX_totalBurnerRunSeconds=0;
+  
+  pthread_rwlock_init(&energy_sample_array_rw_lock, NULL);
+ 
   // Only init this at startup since it is accessed asynchronously in callback routine
   WxConfig.sensorLockingEnabled = 0;
   init_sensor_lock_and_timeout_info();
@@ -451,15 +489,100 @@ static int compute_sealevel_pressure_offset(int altitudeFt, float temp_c) {
   else
     return (int) ((float) (altitudeMeters / (temp_k / 29.263)));
 }
+void WX_process_efergy_msg_error(unsigned char *msg, int length) {
+  // record checksum errors and data decode errors on efergy messages
+   if (rawxDataDumpMode) { 
+      fprintf(outputfd, "RTL-433FM Efergy Msg: "); 
+      int i; 
+      for (i=0 ; i<20; i++) 
+         fprintf(outputfd, "%02x ", msg[i]); 
+      fprintf(outputfd, " (Error Detected)\n");
+   }
+   wxData.BadPktCnt++;
+}
 
-void WX_process_rtl_bad_pkt(unsigned char *msg) {
-  // record v2.1 bit validation errors and checksum errors
+void WX_process_efergy_msg_ok(unsigned char *msg, int length, float kilowatts) {
+   if (rawxDataDumpMode) { 
+      fprintf(outputfd, "RTL-433FM Efergy: "); 
+      int i; 
+      for (i=0 ; i<20; i++) 
+         fprintf(outputfd, "%02x ", msg[i]); 
+      fprintf(outputfd, "  kW: %5.3f\n", kilowatts);
+   }
+   
+   int sensor_lock_code = msg[2];
+   if (wxData.energy.LockCode == -1)
+       wxData.energy.LockCode = sensor_lock_code;
+   else if (wxData.energy.LockCode != sensor_lock_code)
+       wxData.energy.LockCodeMismatchCount++;
+   if ((wxData.energy.LockCode == sensor_lock_code) || ( WxConfig.sensorLockingEnabled == 0)) {
+       wxData.energy.LockCode = sensor_lock_code;
+       wxData.energy.Watts = (int) (kilowatts*1000);
+ 
+       wxData.currentTime.PktCnt++;
+       wxData.energy.Timestamp = wxData.currentTime;
+       struct tm *localTime = localtime(&wxData.energy.Timestamp.timet);
+       int historyIdx=getEnergyHistoryIndex(localTime->tm_min, localTime->tm_sec, ENERGY_HISTORY_SAMPLES_PER_MINUTE);
+       pthread_rwlock_wrlock(&energy_sample_array_rw_lock);
+       wxData.energy.WattsHistory[historyIdx] = wxData.energy.Watts;
+       pthread_rwlock_unlock(&energy_sample_array_rw_lock);
+     }
+}
+void WX_process_owl_msg_error(unsigned char *msg, int length, float watts, float total_kwh) {
+  // record  errors and data decode errors on owl messages
+   if (rawxDataDumpMode) { 
+      fprintf(outputfd, "RTL-433FM OWL Msg: "); 
+      int i; 
+      for (i=0 ; i<length; i++) 
+         fprintf(outputfd, "%02x ", msg[i]); 
+      fprintf(outputfd, " (Error Detected)\n");
+   }
+   fprintf(outputfd, " OWLCM119 Error: Current: %5.0f (watts) Total:%7.3f (kW)\n", watts, total_kwh);
+
+   wxData.BadPktCnt++;
+}
+
+void WX_process_owl_msg_ok(unsigned char *msg, int length, float watts, float total_kwh) {
+   if (rawxDataDumpMode) { 
+      fprintf(outputfd, "RTL-433FM OWL: "); 
+      int i; 
+      for (i=0 ; i<length; i++) 
+         fprintf(outputfd, "%02x ", msg[i]); 
+      fprintf(outputfd, "  Watts: %4.0f   Total kWh: %7.4f\n", watts, total_kwh);
+   }
+   int sensor_lock_code = msg[2];
+   if (wxData.owl.LockCode == -1)
+       wxData.owl.LockCode = sensor_lock_code;
+   else if (wxData.owl.LockCode != sensor_lock_code)
+       wxData.owl.LockCodeMismatchCount++;
+   if ((wxData.owl.LockCode == sensor_lock_code) || ( WxConfig.sensorLockingEnabled == 0)) {
+       wxData.owl.LockCode = sensor_lock_code;
+       wxData.owl.Watts = (int) watts;
+ 
+       wxData.currentTime.PktCnt++;
+       wxData.owl.Timestamp = wxData.currentTime;
+       struct tm *localTime = localtime(&wxData.owl.Timestamp.timet);
+       int historyIdx=getEnergyHistoryIndex(localTime->tm_min, localTime->tm_sec, OWL_ENERGY_HISTORY_SAMPLES_PER_MINUTE);
+       pthread_rwlock_wrlock(&energy_sample_array_rw_lock);
+       wxData.owl.WattsHistory[historyIdx] = wxData.owl.Watts;
+       pthread_rwlock_unlock(&energy_sample_array_rw_lock);
+     }
+}
+void WX_process_os_msg_error(unsigned char *msg, int length) {
+  // record  v2.1 bit validation errors and checksum errors on Oregon Scientific v2.1 and v3 messages
+   if (rawxDataDumpMode) { 
+      fprintf(outputfd, "RTL-433FM OS Msg: "); 
+      int i; 
+      for (i=0 ; i<20; i++) 
+         fprintf(outputfd, "%02x ", msg[i]); 
+      fprintf(outputfd, " (Error Detected)\n");
+   }
   wxData.BadPktCnt++;
 }
 
-void WX_process_rtl_433_pkt(unsigned char *msg, int sensor_id) {
+void WX_process_os_msg_ok(unsigned char *msg, int length, int sensor_id) {
    if (rawxDataDumpMode) { 
-      fprintf(outputfd, "RTL-433 Data: "); 
+      fprintf(outputfd, "RTL-433FM OS Msg: "); 
       int i; 
       for (i=0 ; i<20; i++) 
          fprintf(outputfd, "%02x ", msg[i]); 
@@ -699,6 +822,7 @@ void outputProgramHelp(FILE *fd)
    fprintf(fd,"             a  - Display Action Scheduler Info\n");
    fprintf(fd,"             c  - Process configuration file\n");
    fprintf(fd,"             d  - Show debugging statistics\n");
+   fprintf(fd,"             e  - Show energy data (kilowatts) for last 15 mins\n");
    fprintf(fd,"             f  - invoke file parser - to replace tags w/data\n");
    fprintf(fd,"             i  - Show config info\n");
    fprintf(fd,"             l  - clear log file (rtl-wx.log)\n");
@@ -708,6 +832,7 @@ void outputProgramHelp(FILE *fd)
    fprintf(fd,"             s  - Save data snapshot now\n");
    fprintf(fd,"             t  - Toggle raw sensor message display mode\n");
    fprintf(fd,"             u  - Initiate FTP upload\n");
+   fprintf(fd,"             v  - (not implemented) Trim CSV files (older entries removed\n");
    fprintf(fd,"             w  - Save webcam snapshot\n");
    fprintf(fd,"             q  - quit client (server stays running)\n");
    fprintf(fd,"            ESC - Kill server (and quit client)\n");

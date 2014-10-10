@@ -66,9 +66,9 @@ void WX_DumpInfo(FILE *fd) {
             fprintf(fd, "   %s (Ch%2d) ",WxConfig.extNameStrings[sensorIdx], sensorIdx+1);
          else 
             fprintf(fd, "   Extra Sensor%2d ", sensorIdx+1);
-            fprintf(fd, "Temp: %5.1f  Relative Humidity: %d%%  Dewpoint: ",
+         fprintf(fd, "Temp: %5.1f  Relative Humidity: %d%%  Dewpoint: ",
                wxData.ext[sensorIdx].Temp*1.8 + 32, wxData.ext[sensorIdx].RelHum);
-            fprintf(fd,"%2.1f ",wxData.ext[sensorIdx].Dewpoint*1.8+32);
+         fprintf(fd,"%2.1f ",wxData.ext[sensorIdx].Dewpoint*1.8+32);
          if (wxData.ext[sensorIdx].BatteryLow == TRUE)
             fprintf(fd, "(** Sensor Battery Low)");
             fprintf(fd,"\n");
@@ -91,7 +91,7 @@ void WX_DumpInfo(FILE *fd) {
          fprintf(fd, "   %s (IDU)  Pressure: ",WxConfig.iduNameString);
       else
          fprintf(fd, "   Indoor  Pressure: ");      
-      fprintf(fd, "%d mbar   Sealevel: %d  Forecast: %s\n",
+      fprintf(fd, "%d mbar   Sealevel: %4d Forecast: %s\n",
                     wxData.idu.Pressure, wxData.idu.Pressure+wxData.idu.SeaLevelOffset, wxData.idu.ForecastStr);
    }
    
@@ -108,6 +108,24 @@ void WX_DumpInfo(FILE *fd) {
          fprintf(fd, "(**Low Sensor Battery)");
       fprintf(fd,"\n");   ;
    }
+   // --------------------------- Energy Sensor info ---------------------------------------------------
+   if (isTimestampPresent(&wxData.energy.Timestamp))
+      fprintf(fd, "   Energy Usage (Efergy): %4d watts  Avg Last Hr: %4d  Avg Last Day: %4d\n", 
+		wxData.energy.Watts, getWattsAvgAvg(1, 4), getWattsAvgAvg(1, 24*4));  
+   if (isTimestampPresent(&wxData.owl.Timestamp)) {
+      float fuelBurnedLastHour = (float) getBurnerRunSecondsTotal(0, 4) /(60*60) * WxConfig.fuelBurnerGallonsPerHour;
+      float fuelBurnedLastDay = (float) getBurnerRunSecondsTotal(0, 24*4) /(60*60) * WxConfig.fuelBurnerGallonsPerHour;
+      float fuelBurnedTotal = (float) WX_totalBurnerRunSeconds/(60*60) * WxConfig.fuelBurnerGallonsPerHour;
+      if (fuelBurnedLastDay != 0)
+         fprintf(fd, "     Oil Usage (Gallons): %4.2f (last hr)  %4.2f (last day)  %4.2f (Total)\n", 
+		fuelBurnedLastHour, fuelBurnedLastDay, fuelBurnedTotal);
+      else
+         fprintf(fd, "   Energy Usage (OWL119): %4d watts  Avg Last Hr: %4d  Avg Last Day: %4d\n", 
+		wxData.owl.Watts, getWattsAvgAvg(0, 4), getWattsAvgAvg(0, 24*4));
+   }
+   if ((isTimestampPresent(&wxData.energy.Timestamp)) || (isTimestampPresent(&wxData.owl.Timestamp)))
+      fprintf(fd, "\n");
+
    // --------------------------- Rain Gauge info ---------------------------------------------------
    if (isTimestampPresent(&wxData.rg.Timestamp)) {
       fprintf(fd, "   Rainfall: %dmm/hr  Total Rainfall: %dmm ", wxData.rg.Rate, wxData.rg.Total);
@@ -116,6 +134,188 @@ void WX_DumpInfo(FILE *fd) {
       fprintf(fd,"\n");   
    }
   fprintf(fd,"\n");
+}
+
+int getWattsAvgAvg(int use_efergy_sensor, int numSnapshotsToAverage) {
+	int i;
+	int sumWattsAvg=0;
+	int wattsAvgCount=0;
+	for (i=1;i<=numSnapshotsToAverage;i++) {
+		WX_Data *wxDatap = WX_GetWeatherDataRecord(i);
+		if (wxDatap != NULL) {
+			if (use_efergy_sensor) {
+			   if (isTimestampPresent(&wxDatap->energy.Timestamp)) {
+				sumWattsAvg += wxDatap->energy.WattsAvg;
+				wattsAvgCount++;
+			   }
+			} else {
+			   if (isTimestampPresent(&wxDatap->owl.Timestamp)) {
+				sumWattsAvg += wxDatap->owl.WattsAvg;
+				wattsAvgCount++;
+			   }
+			}
+		}
+	}
+	if (wattsAvgCount != 0)
+		return (sumWattsAvg/wattsAvgCount);
+	else
+		return (0);
+}
+int getBurnerRunSecondsTotal(int use_efergy_sensor, int numSnapshotsToSum) {
+	int i;
+	int runSecondsTotal=0;
+	for (i=1;i<=numSnapshotsToSum;i++) {
+		WX_Data *wxDatap = WX_GetWeatherDataRecord(i);
+		if (wxDatap != NULL) {
+			if (use_efergy_sensor) {
+			   if (isTimestampPresent(&wxDatap->energy.Timestamp))
+				runSecondsTotal += wxDatap->energy.BurnerRuntimeSeconds;
+			} else {
+			   if (isTimestampPresent(&wxDatap->owl.Timestamp))
+				runSecondsTotal += wxDatap->owl.BurnerRuntimeSeconds;
+			}
+		}
+	}
+	return (runSecondsTotal);
+}
+int getEnergyHistoryIndex(int minute, int second, int samples_per_minute) {
+  // For any minute,second pair, return the index into the energy history array that
+  // corresponds to that  time.   Energy history is indexed by time and sample number.
+  // It's assumed that there are x samples per minute and that the history stores
+  // y minutes of sample data.  So given any minute/second pair, the
+  // appropriate index into the sample array for that time can be computed.
+  // if second=0, the first sample for the given minute is returned
+  int minutesOffset =  minute % NUM_MINUTES_PER_SNAPSHOT;
+  int secondsOffset = second/(60 / samples_per_minute);
+  int index = (minutesOffset*samples_per_minute) + secondsOffset;
+  if ((index<0) || (index >= (samples_per_minute*NUM_MINUTES_PER_SNAPSHOT))) {
+    DPRINTF("Energy history index out of range (%d). Minute=%d Second=%d samples_per_Min=%d\n", index, minute, second, samples_per_minute);
+    index=0;
+  }
+  return index;
+}
+
+//--------------------------------------------------------------------------------------------------------------------------------------------
+void WX_DumpEnergyHistoryInfo(FILE *fd, char *sensor_name, WX_EnergySensorData *energyp, int samples_per_minute) { 
+      
+   int dumping_efergy_sensor = (energyp == &wxData.energy);
+   
+   if (isTimestampPresent(&energyp->Timestamp))  { 
+        float fuelBurnedLastHour = (float) getBurnerRunSecondsTotal(dumping_efergy_sensor, 4) /(60*60) * WxConfig.fuelBurnerGallonsPerHour;
+        float fuelBurnedLastDay = (float) getBurnerRunSecondsTotal(dumping_efergy_sensor, 24*4) /(60*60) * WxConfig.fuelBurnerGallonsPerHour;
+	float fuelBurnedTotal = (float) WX_totalBurnerRunSeconds/(60*60) * WxConfig.fuelBurnerGallonsPerHour;
+
+	if (fuelBurnedLastDay != 0)
+          fprintf(fd, "   Current %s Energy Use: %d watts  Oil Used Last Hr: %4.2f  Last Day: %4.2f Cumulative: %4.2f (gals)\n\n", 
+		 sensor_name, energyp->Watts, fuelBurnedLastHour, fuelBurnedLastDay, fuelBurnedTotal);
+	else
+          fprintf(fd, "   Current %s Energy Use: %d watts  Avg Last Hr: %d  Avg Last Day: %d\n\n", 
+		sensor_name, energyp->Watts, getWattsAvgAvg(dumping_efergy_sensor, 4), getWattsAvgAvg(dumping_efergy_sensor,24*4));	struct tm *localTime = localtime(&wxData.currentTime.timet);
+
+	fprintf(fd,"   Most Recent Sample Data (%d samples per minute)\n    ", samples_per_minute);
+	int min;
+	for (min=0;min<15;min++) {
+		int displayMinute = localTime->tm_min - min;
+		int displayHour = localTime->tm_hour;
+		if (displayMinute < 0) {
+			displayMinute = 60 + displayMinute;
+			if (displayHour == 0)
+				displayHour = 23;
+			else 
+				displayHour -= 1;
+		}
+		fprintf(fd,"%02d:%02d ",displayHour, displayMinute);
+	}
+	fprintf(fd,"\n    ");
+	int minutesSinceSnapshot = localTime->tm_min % 15;
+	int sample;
+	for (sample=0;sample<samples_per_minute; sample++) {
+		for (min=0;min<15;min++) {
+			// Use current data for all minutes since the last snapshot. 
+			int minuteToGet = localTime->tm_min - min;
+			if (minuteToGet < 0)
+				minuteToGet = 15 + minuteToGet;
+			minuteToGet = minuteToGet % 15;
+			int idx = getEnergyHistoryIndex(minuteToGet,0, samples_per_minute) + sample;
+			int watts=0;
+			if (min <= minutesSinceSnapshot)
+				watts = energyp->WattsHistory[idx];
+			else {
+				WX_Data *wxDatap = WX_GetWeatherDataRecord(1);
+				if (wxDatap != NULL) {
+				   if (dumping_efergy_sensor)
+				      watts = wxDatap->energy.WattsHistory[idx];
+				   else
+				      watts = wxDatap->owl.WattsHistory[idx];
+				}
+			}
+			if (watts == 0)
+				fprintf(fd,"      ");
+			else
+				fprintf(fd,"%5d ", watts);
+		}
+		fprintf(fd,"\n    ");
+	}
+
+	if ((dumping_efergy_sensor == 1) || (WxConfig.fuelBurnerOnWattageThreshold == 0)) {
+	// Dump average wattage efergy energy sensor and owl energy sensor, when owl is not being used for buner on time tracking...
+	fprintf(fd,"\n   Average energy usage (watts) over last 24 hours in 15 minute intervals\n    ");
+	int col, row;
+	for (row=0;row<4; row++) {
+		for (col=1;col<=16; col++) {
+			WX_Data *wxDatap = WX_GetWeatherDataRecord((row*16)+col);
+			if (isTimestampPresent(&wxDatap->currentTime)) {
+				struct tm *localTime = localtime(&wxDatap->currentTime.timet);
+				fprintf(fd,"%02d:%02d ", localTime->tm_hour, localTime->tm_min);
+			} else
+				fprintf(fd,"      ");
+		}
+		fprintf(fd,"\n    ");
+		for (col=1;col<=16;col++) {
+			int record = (row*16) + col;
+			int watts = 0;
+			WX_Data *wxDatap = WX_GetWeatherDataRecord(record);
+			if (wxDatap != NULL) {
+				if (dumping_efergy_sensor)
+				      watts = wxDatap->energy.WattsAvg;
+				else
+				      watts = wxDatap->owl.WattsAvg;
+			}
+			if (watts != 0)
+				fprintf(fd,"%5d ", watts);
+			else
+				fprintf(fd,"      ");
+		}
+		fprintf(fd,"\n\n    ");
+	}
+	} else { 
+	fprintf(fd,"\n   Burner run time in seconds during last 24 hours (15 minute intervals)\n    ");
+	int col, row;
+	for (row=0;row<4; row++) {
+		for (col=1;col<=16; col++) {
+			WX_Data *wxDatap = WX_GetWeatherDataRecord((row*16)+col);
+			if (isTimestampPresent(&wxDatap->currentTime)) {
+				struct tm *localTime = localtime(&wxDatap->currentTime.timet);
+				fprintf(fd,"%02d:%02d ", localTime->tm_hour, localTime->tm_min);
+			} else
+				fprintf(fd,"      ");
+		}
+		fprintf(fd,"\n    ");
+		for (col=1;col<=16;col++) {
+			int record = (row*16) + col;
+			int seconds = 0;
+			WX_Data *wxDatap = WX_GetWeatherDataRecord(record);
+			if (wxDatap != NULL)
+				seconds = wxDatap->owl.BurnerRuntimeSeconds;
+			if (seconds != 0)
+				fprintf(fd,"%5d ", seconds);
+			else
+				fprintf(fd,"      ");
+		}
+		fprintf(fd,"\n\n    ");
+	} }
+   fprintf(fd,"\n");
+   }
 }
 
 static void printMaxMinTemp(FILE *fd, char *label,float maxTemp, WX_Timestamp *maxTs, float minTemp, WX_Timestamp *minTs);
@@ -191,7 +391,30 @@ void WX_DumpMaxMinInfo(FILE *fd)
   printMaxMinWindSpeed(fd,"      Avg. Speed",
                   maxDatap->wg.AvgSpeed, &maxDatap->wg.AvgSpeedTimestamp, 
                   minDatap->wg.AvgSpeed, &minDatap->wg.AvgSpeedTimestamp);
-
+  if (isTimestampPresent(&maxDatap->energy.Timestamp) || 
+      isTimestampPresent(&minDatap->energy.Timestamp)) {
+     fprintf(fd, "\n   Power Consumption\n    Efergy Watts");
+     fprintf(fd, " %5d  ", minDatap->energy.Watts);
+     printTimestamp(fd, &minDatap->energy.Timestamp); 
+     fprintf(fd, "  %5d  ", maxDatap->energy.Watts);
+     printTimestamp(fd, &maxDatap->energy.Timestamp);
+     fprintf(fd, "\n"); 
+    }
+  if (isTimestampPresent(&maxDatap->owl.Timestamp) || 
+      isTimestampPresent(&minDatap->owl.Timestamp)) {
+     fprintf(fd, "    OWL119 Watts");
+     fprintf(fd, " %5d  ", minDatap->owl.Watts);
+     printTimestamp(fd, &minDatap->owl.Timestamp); 
+     fprintf(fd, "  %5d  ", maxDatap->owl.Watts);
+     printTimestamp(fd, &maxDatap->owl.Timestamp);
+     fprintf(fd, "\n");
+     fprintf(fd, "  Burner On Secs");
+     fprintf(fd, " %5d  ", minDatap->owl.BurnerRuntimeSeconds);
+     printTimestamp(fd, &minDatap->owl.Timestamp); 
+     fprintf(fd, "  %5d  ", maxDatap->owl.BurnerRuntimeSeconds);
+     printTimestamp(fd, &maxDatap->owl.Timestamp);
+     fprintf(fd, "\n");
+    }
   if (isTimestampPresent(&maxDatap->rg.RateTimestamp) || 
       isTimestampPresent(&minDatap->rg.RateTimestamp)) {
      fprintf(fd, "\n   Rain Gauge\n       Rain Rate");
@@ -321,7 +544,10 @@ void WX_DumpSensorInfo(FILE *fd)
           wxData.wg.noDataFor300Seconds, wxData.wg.noDataBetweenSnapshots, &wxData.wg.Timestamp);
    printSensorStatus(fd,"   Rain Gauge    ", wxData.rg.LockCode,  wxData.rg.LockCodeMismatchCount,  
           wxData.rg.noDataFor300Seconds, wxData.rg.noDataBetweenSnapshots, &wxData.rg.Timestamp);
-     
+   printSensorStatus(fd,"   Efergy Sensor ", wxData.energy.LockCode,  wxData.energy.LockCodeMismatchCount,  
+          wxData.energy.noDataFor300Seconds, wxData.energy.noDataBetweenSnapshots, &wxData.energy.Timestamp);     
+   printSensorStatus(fd,"   OWL119 Sensor ", wxData.owl.LockCode,  wxData.owl.LockCodeMismatchCount,  
+          wxData.owl.noDataFor300Seconds, wxData.owl.noDataBetweenSnapshots, &wxData.owl.Timestamp);      
    if (WxConfig.sensorLockingEnabled)
      fprintf(fd, "\n   Sensor Locking is ENABLED (edit rtl-wx.conf to change)\n\n");
    else
@@ -358,11 +584,13 @@ void printExtraSensorStatus(FILE *fd, int sensorIdx) {
 void WX_DumpConfigInfo(FILE *fd)
 {
  int i;
- char passwdStr[20];
+ char passwdStr[21];
  int configFileReadFrequency;
 
  fprintf(fd, "    sensorLockingEnabled: %d\n",WxConfig.sensorLockingEnabled);
  fprintf(fd, "          altitudeInFeet: %d\n",WxConfig.altitudeInFeet);
+ fprintf(fd, "     fuelBurnerOnWattage: %d\n",WxConfig.fuelBurnerOnWattageThreshold);
+ fprintf(fd, "    burnerGallonsPerHour: %4.2f\n",WxConfig.fuelBurnerGallonsPerHour);
  fprintf(fd, " configFileReadFrequency: %d\n",WxConfig.configFileReadFrequency);
  fprintf(fd, "   dataSnapshotFrequency: %d\n",WxConfig.dataSnapshotFrequency);
  fprintf(fd, " webcamSnapshotFrequency: %d\n\n",WxConfig.webcamSnapshotFrequency);
@@ -370,6 +598,11 @@ void WX_DumpConfigInfo(FILE *fd)
  fprintf(fd, "      NumTagFilesToParse: %d\n",WxConfig.NumTagFilesToParse);
  for (i=0;i<WxConfig.NumTagFilesToParse;i++)
     fprintf(fd, "                    %-15s -> %s\n",WxConfig.tagFiles[i].inFile, WxConfig.tagFiles[i].outFile);
+ fprintf(fd, "         realtimeCsvFile: Rewrite %s every %d minute(s)\n",
+               WxConfig.realtimeCsvFile,WxConfig.realtimeCsvWriteFrequency);
+ fprintf(fd, "     numCsvFilesToUpdate: %d\n",WxConfig.numCsvFilesToUpdate);
+ for (i=0;i<WxConfig.numCsvFilesToUpdate;i++)
+    fprintf(fd, "                    update %s every %d snapshot(s)\n",WxConfig.csvFiles[i].fname, WxConfig.csvFiles[i].snapshotsBetweenUpdates);
  fprintf(fd, "\n");
  fprintf(fd, "      ftpUploadFrequency: %d\n",WxConfig.ftpUploadFrequency);
  fprintf(fd, "       ftpServerHostname: %s\n",WxConfig.ftpServerHostname);

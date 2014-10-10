@@ -2,7 +2,7 @@
 RTL-Wx User Guide
 --------------------------------------------------------------------------------
 
-RTL-Wx collects and manages Oregon Scientific 433Mhz wireless weather sensor data using a USB RTL-SDR dongle.  The program is ready to run with a compatible Raspberry Pi or Netgear R7000 setup. 
+RTL-Wx collects and manages data from 433Mhz wireless sensors using a USB RTL-SDR dongle.  The program is ready to run with a compatible Raspberry Pi or Netgear R7000 setup. 
 
 This guide provides an overview of how to configure and use the RTL-Wx software once it has been installed on the target hardware.  To install the software, please see the appropriate hardware specific install instructions.
 
@@ -11,6 +11,8 @@ Raspberry Pi Hardware Setup (your mileage may vary)
 - 4GB Class 10 SDcard with Raspbian GNU/Linux 7, wheezy installed.
 - NooElec NESDR Mini USB RTL-SDR & ADS-B Receiver Set, RTL2832U & R820T Tuner
 - Oregon Scientific 433Mhz weather sensors (v2.1 - THGR968, BTHR968, THGR268, RGR968,  v3 - THGR810)
+- Efergy Elite TPM electricity sensor (connected to main electricity feed)
+- Owl CM119A electricity sensor (connected to oil burner circuit)
 - Gigaware 720p HD Desktop Web Cam (from eBay)
 
 Netgear R7000 hardware setup
@@ -38,7 +40,7 @@ Overview of Software
 
 The RTL-Wx software is intended to operate primarily as a daemon without any direct user interaction.  Once it is started, the software collects data from 433Mhz weather sensors and periodically processes template files by replacing predefined "tags" with wirelessly received sensor data.  
 
-The processed files (usually in html format) can be accessed using the embedded web server and on Raspberry Pi can be periodically uploaded to a remote web server using FTP.  "Tags" have been defined to provide access to weather sensor data. 
+The processed files (usually in html format) can be accessed using the embedded web server and on Raspberry Pi can be periodically uploaded to a remote web server using FTP.  "Tags" have been defined to provide access to most weather sensor data. 
 
 Finally, on Raspberry Pi, the software has the ability to periodically save a webcam snapshot and either serve the image using the embedded web server, or upload it to a remote web site using FTP.
 
@@ -49,9 +51,9 @@ Files and folders
 FOLDER: rtl-wx/bin
 
 This has RTL-Wx binaries for Raspberry Pi and R7000. Before using, copy or
-link the appropriate binary from rtl-wx/bin/<target name> folder to rtl-wx/bin and
+link the appropriate binary from the target specific folder to rtl-wx/bin and
 make sure execute permissions are set.  Also, copy the appropriate header.htm
- to rtl-wx/www/misc.  This file has build information displayed by the web interface.
+from the target bin folder to www.  This file has build and target information.
 
 Invoke the program  from rtl-wx/bin as follows: (usually done as part of system startup) 
 
@@ -64,19 +66,19 @@ Invoke the program  from rtl-wx/bin as follows: (usually done as part of system 
 	rtl-433 -h
 
 
-FOLDER: rtl-wx/src (see advanced users guide for more information
+FOLDER: src (see advanced users guide for more information
 
-FOLDER: rtl-wx/www
+FOLDER: www
       
-This folder contains files used by the embedded web server as well as log, config and output files
+This folder contains files used by the embedded web server as well as config and output files
 
 The following pairs of files implement the 4 main tabs available on the embedded web server:
-- index.cgi & misc/index.htm
-- deviceinfo.cgi & misc/deviceinfo.htm
-- logfile.cgi & misc/logfile.htm
-- scheduler.cgi & misc/scheduler.htm
+- index.cgi & home.htm
+- debug.cgi & debug.htm
+- logfile.cgi & logfile.htm
+- scheduler.cgi & scheduler.htm
 
-Note that the cgi scripts won't run if you don't set the correct permissions on them and if web server user (on raspberry pi) doesn't have read and execute access (see install instructions for details).
+Note that the cgi scripts won't run if you don't set the correct permissions on them and if user www-user (on raspberry pi) doesn't have read and execute access.
 
 
 Other files in the www folder
@@ -84,7 +86,7 @@ Other files in the www folder
 
 - rtl-wx.conf
 
-This file allows you to configure the software.  You can list the names of files that have tags that you want replaced with weather data periodically.  Also you can specify FTP server configuration information.  You can also specify the frequency at which to perform scheduled operations (like replacing tags in file, uploading, or taking data snapshots).  This file is fairly self-documented, so the best way to learn about the config options is to look at this file.
+This file allows you to configure the operation of the software.  Here you can list the names of files that have tags that you want replaced with weather data periodically.  Also you can specify FTP server configuration information.  You can also specify the frequency at which to perform scheduled operations (like replacing tags in file, uploading, or taking data snapshots).  This file is fairly self-documented, so the best way to learn about the config options is to look at this file.
 
 - webcam.jpg
 
@@ -113,7 +115,7 @@ Once you have the software installed, configured, and running, you should be abl
 
 WARNING: The web interface uses CGI bin scripts to communicate with the running rtl-wx program.  Because the program utilizes something called unix named pipes for this communication, the web interface cannot support more than 1 simulataneous user.  
 
-THE STATUS AND DEBUGGING PAGES ON THE WEB INTERFACE ARE PRIMARILY INTENDED FOR SETUP, DEBUG, AND STATUS CHECKING AND NOT ROUTINE ACCESS BY MULTIPLE USERS.  
+IN GENERAL, THE STATUS AND DEBUGGING PAGES ON THE WEB INTERFACE ARE PRIMARILY INTENDED FOR SETUP, DEBUG, AND STATUS CHECKING RATHER THAN ROUTINE ACCESS.  
 
 The above warning does not apply to viewing web pages that don't use cgi scripts, such as rtl-wx.htm
  
@@ -169,15 +171,15 @@ Force FTP Upload (raspberry pi only)
 
 Force an FTP upload.  The configuration file is not reread when this command is processed, so if you need it to be reread, you need to issue a reload command first.  No status is given, but you can use the "show log" command to check for errors after the upload has completed.
 
-Show Sensor Info
+Show Status Info
 ----------------
 
-This command dumps a bunch of sensor status info including lock codes, a count of lock code mismatches, and other info.  If you need to enabled locking sensors based on their rolling code, you can use the Sensor Info page to reset the codes when you replace your sensor battery.
+This command dumps a bunch of status data including sensor lock codes. Sensor locking is not implemented except that the first three changes in each lock code are logged to the log file.
 
 Custom Web
 ----------
 
-This command doesn't communicate with the rtl-wx server, but it displays the rtl-wx.htm file. It doesn't depend on an FTP upload occuring since the default web page is served locally by the embedded web server.  To test out FTP uploads, you need to enter the URL of your remote web site directly into your browser.
+This command doesn't communicate with the rtl-wx server, but just links to the default html file (rtl-wx.htm). This command doesn't depend on an FTP upload occuring since the default web page is served locally by the embedded web server.  To test out FTP uploads, you need to enter the URL of your remote web site directly into your browser.
 
 --------------------------------------------------------------------------------
 Creating a custom web page

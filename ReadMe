@@ -1,4 +1,6 @@
-RTL-Wx collects Oregon Scientific 433Mhz wireless weather sensor data using a low cost USB RTL-SDR dongle.  The project is ready to run with a compatible Raspberry Pi or Netgear R7000 setup.  
+RTL-Wx collects 433Mhz wireless sensor data using a low cost USB RTL-SDR dongle.  
+The project is ready to run with a compatible Raspberry Pi or Netgear R7000 setup using
+Oregon Scientific temperature sensors and Efergy or Owl electricity sensors.
 
 To install the software, please see the appropriate hardware specific instructions in rtl-wx/doc. 
 
@@ -15,6 +17,8 @@ Tested Hardware setups
 - 4GB Class 10 SD card with Raspbian GNU/Linux 7, wheezy installed.
 - NooElec NESDR Mini USB RTL-SDR & ADS-B Receiver Set, RTL2832U & R820T Tuner
 - Oregon Scientific 433Mhz weather sensors (several v2.1 & v3 models tested)
+- Efergy Elite TPM Electricity sensor
+- Owl CM119A Electricity sensor (connected to oil burner circuit to monitor oil consumption)
 - Gigaware 720p HD Desktop Web Cam (from eBay)
 
 2) Netgear R7000 w/DD-WRT
@@ -22,11 +26,16 @@ Tested Hardware setups
 - 1GB USB flash drive in front (usb 3.0) port with /Opt /Jffs and /Swap partitions automounted
 - NooElec NESDR Mini USB RTL-SDR & ADS-B Receiver Set, RTL2832U & R820T Tuner
 - Oregon Scientific 433Mhz weather sensors (several v2.1 & v3 models tested)
+- (Haven't yet tested Efergy sensor with Netgear router - I think it should work but require recompile)
+- Owl CM119A Electricity sensor (connected to oil burner circuit to monitor oil consumption)
 - NOTE: Webcam and FTP functionality not supported/tested on R7000
 
 Tested with these Oregon Scientific 433Mhz sensors
   - OS protocol v2.1 - THGR968, BTHR968, THGR268, RGR968
   - OS protocol v3   - THGR810
+Tested with these 433Mhz electricity sensors
+  - Efergy True Power Monitor (TPM) (On Raspberry Pi only)
+  - Owl CM119A 
   
 Multiple OS sensor models use the same sensor ids and message format, so some sensors not listed here may also work.  For example the THGR122N and THGN123N seem to use the same sensor id and layout as the THGR268 (id 0x1d20). The code almost supports the WMR968 wind gauge, but since mine is broken, more work is needed.  To add support for new sensors, change code in appropriate low level Oregon Scientific v2.1 and v3 protocol parsing routine in src/rtl-433.c and in message decode logic in src/rtl-wx.c.
 

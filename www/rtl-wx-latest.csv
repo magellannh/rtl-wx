@@ -1,0 +1,2 @@
+Time,efergyWatts,efergyLastHr,efergyLastDay,owlWatts,owlLastHr,owlLastDay,fuelGallonsLastHr,fuelLastDay,fuelTotal,oduTemp,oduDewpoint,iduTemp,iduDewpoint,ext1Temp,ext1Dewpoint,ext2Temp,ext2Dewpoint,ext3Temp,ext3Dewpoint,ext4Temp,ext4Dewpoint,iduSealevelPressure
+1412964360,426,557,690,50,50,59,0.00,0.35,1.23,59.4,33.1,59.7,38.9,62.2,45.4,74.7,54.3,61.7,47.3,60.8,46.9,30.06

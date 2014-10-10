@@ -1,7 +1,13 @@
-RTL-Wx Weather sensor monitoring software
+RTL-Wx Home Monitoring software
 
 Version Info and Release
 
+10-08-2014 - v3.1
+  - Complete rewrite of rtl-wx.htm to incorporate HighStock charting package and JustGage gauge widgets.
+  - Added CSV data logging capability (generated csv files are used by rtl-wx.htm)
+  - Added support for Efergy and Owl electricity monitors
+  - Added Oil Burner fuel consumption monitoring (uses Owl CM119A electricity sensor on oil burner circuit)
+  
 07-25-2014 - v2.2
   - Reworked timestamp sructs and tlogic to use C time_t instead of storing min/hour/day/month/year.
   - Added timeout field to sensor info->sensor status output
@@ -14,7 +20,7 @@ Version Info and Release
   - Fixed bug in sensor naming code (from 07/03) that caused memory corruption (accidental semicolon after for loop)
   - Eliminated legacy wmr9x8 serial port weather station support (now only suports 433mhz USB rtlsdr)
   - Updated Documentation to prepare for release
-/
+
 07-03-2014 - Added ability to name sensors for debug info display (see rtl-wx.conf)
 06-28-2014 - Fixed error in SlugWx.htx that caused duplicate sample in graph displays (param 28? duplicated)
  
@@ -22,8 +28,11 @@ Version Info and Release
   - Replaced pwc/vidcat calls with fswebcam call
   - Added rtl_433 library to read receive data using 433Mhz USB-RTL dongle instead of connected weather station.
   
+  
+  
+
 ----------------------------------------------------------------------------------
-Notes  (From NSLU2 incarnation of program which connected serially to a wmr968 weather station)
+Legacy Notes  (From old NSLU2 incarnation of program which connected serially to a wmr968 weather station)
 
 SlugWx Weather station monitoring software for the NSLU2
 
