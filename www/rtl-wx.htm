@@ -19,16 +19,24 @@
 
 <!-- js-function for reading csv and options for graph -->
 <script type="text/javascript">
-   var gOutdoor, gStudy, gAttic, gSunroom, gStudio, gBedroom, gElectric, gOil;
-   var chart;
+
+   // Adjust these 2 fuel and electriicty cost vars with updated unit cost with current pricing
+   var fuelCostPerGallon = 3.50, electricityCostPerKWH = .15;
    
+   var gaugeFuelCost, gaugeElectricityUsage;
+   
+   // Define gauge objects used by the justgage.js gauges
+   var gOutdoor, gStudy, gAttic, gSunroom, gStudio, gBedroom, gElectric, gFuel;
+   var chart;
    //                                                 0-Blue                  1-Yellow             2-Orange       3-light purple      4-light green     5-grey             6-light raspberry    7-light brown
    //                                     outside, dewpoint     bedroom-in dew       sunroom          electricity             studio             pressure, oil            study              attic, in out diff
-   var displayColors=['#7cb5ec','#E9E581','#f7a35c','#8085e9','#90ed7d', '#787174', '#BF52AF', '#A3804E'];  
+   var displayColors=['#7cb5ec','#E9E581','#f7a35c','#8085e9','#90ed7d', '#787174', '#BF52AF', '#A3804E'];
+   
    Highcharts.setOptions({ global: { useUTC: false }});
    
    var titleFontColor = '#838383';
-   var labelFontColor = '#636363'; 
+   var labelFontColor = '#636363';
+   
    window.onload = function(){
     gOutdoor = new JustGage({ id: "gOutdoor", value: 0, valueSymbol: "\u00B0", min: 0, max: 100, 
      levelColors: [ displayColors[0] ], titleFontColor: titleFontColor, labelFontColor: labelFontColor,
@@ -51,18 +59,31 @@
     gElectric = new JustGage({ id: "gElectric",  value: 0, valueSymbol: "w", min: 0, max: 3000,
      levelColors: [ displayColors[3] ], titleFontColor: titleFontColor, labelFontColor: labelFontColor,
      title: "Electricity", label: "", levelColorsGradient: false });
-    gOil = new JustGage({ id: "gOil",  value: 0, valueSymbol: "$", min: 0, max: 3.5,
+    gFuel = new JustGage({ id: "gOil",  value: 0, valueSymbol: "$", min: 0, max: 3.5,
      levelColors: [ displayColors[5] ], titleFontColor: titleFontColor, labelFontColor: labelFontColor,
-     title: "Oil Burner", label: "", levelColorsGradient: false });
+     title: "Heating Oil", label: "", levelColorsGradient: false });
      };
+   
+   // Define HighStock Options
    var options = {
-	chart: { renderTo: 'chart', zoomType: 'x', spacingBottom: 7, marginBottom: 55 },
+	chart: { renderTo: 'chart', zoomType: 'x', spacingBottom: 7, marginBottom: 55, animation: false,
+	         events: { load: function () {  
+		          this.rangeSelector.buttons[0].on('click', function(e) { rangeButtonClick(0); });
+		          this.rangeSelector.buttons[1].on('click', function(e) { rangeButtonClick(1); });
+		          this.rangeSelector.buttons[2].on('click', function(e) { rangeButtonClick(2); });
+		          this.rangeSelector.buttons[3].on('click', function(e) { rangeButtonClick(3); });
+		          this.rangeSelector.buttons[4].on('click', function(e) { rangeButtonClick(4); });
+		          this.rangeSelector.buttons[5].on('click', function(e) { rangeButtonClick(5); });
+		          this.rangeSelector.buttons[6].on('click', function(e) { rangeButtonClick(6); });
+		          this.rangeSelector.buttons[7].on('click', function(e) { rangeButtonClick(7); });
+			  } } 
+			  }, 
 	title: { text: '' },     
 	 //subtitle: { text: 'Watts' },   
 	xAxis: { type: 'datetime',  gridLineWidth: 1,
 		dateTimeLabelFormats: { day : '<b>%A</b>', hour: '%l%P' } ,
 	        events: { afterSetExtremes: afterSetExtremes } },
-	rangeSelector:{ enabled:true, inputEnabled: false,
+	rangeSelector:{ enabled:true, inputEnabled: false,                     
 	    buttonTheme: { width : 55 }, selected: 0, allButtonsEnabled: true,
 	    buttons: [ 
 	     { type: 'all', text: 'All' }, 
@@ -120,92 +141,58 @@
 	series: [] 
     };
    
-   // Chart uses a completely different dataset depending on the date range button that's selected
+   // Global chart data storage - The main Highstock chart is implemented using three different datasets, depending on the date range button that's selected
+   // The three datasets are loaded as needed from CSV files.  Each one has records that have a different recording interval.  This keeps the size of the files
+   // small while still allowing good granularity for the daily view.
+   //  The idea is that the short dataset is used for 1-3 days, the meduim dataset is used for 30-90 days, and the long dataset is used beyond that
+   // This is all handled automatically when different date range buttons are clicked on the chart.  
    var chartDataSets = [ // State can be either 'init', 'loading',  'ready'
-	{ name: 'short',  state: 'init', filename: 'rtl-wx-15min.csv', 
+	{ name: 'short',  state: 'init', filename: 'rtl-wx-15min.csv', intervalHours: .25,
 	  data0:[],data1:[],data2:[],data3:[],data4:[],data5:[],
 	  data6:[],data7:[],data8:[],data9:[],data10:[],data11:[]},
-	{ name: 'medium', state: 'init', filename: 'rtl-wx-1hr.csv', 
+	{ name: 'medium', state: 'init', filename: 'rtl-wx-1hr.csv', intervalHours: 1,
 	  data0:[],data1:[],data2:[],data3:[],data4:[],data5:[],
 	  data6:[],data7:[],data8:[],data9:[],data10:[],data11:[]},	
-	{ name: 'long',   state: 'init', filename: 'rtl-wx-daily.csv', 
+	{ name: 'long',   state: 'init', filename: 'rtl-wx-daily.csv', intervalHours: 24,
 	  data0:[],data1:[],data2:[],data3:[],data4:[],data5:[],
 	  data6:[],data7:[],data8:[],data9:[],data10:[],data11:[] }];
    var currentDataSetIndex;
 
-   // Predefine a series object for each data series that the chart will/might contain  
+   // Predefine series objects for each data series used in the Highstocks chart
    var  series0 = { name: 'Outside',            color: displayColors[0], animation: false,
-			 data: [],
-			//dashStyle: 'shortdot',
-			marker:  { enabled: false },
-			 tooltip: { valueSuffix: '°F'} },
+                    data: [], marker: { enabled: false }, tooltip: { valueSuffix: '°F'}},
 	series1 = { name: 'Bedroom',            color: displayColors[1], animation: false,
-			 data: [],
-			//dashStyle: 'shortdot',
-			marker: { enabled: false },
-			 tooltip: { valueSuffix: '°F'}},
+                    data: [], marker: { enabled: false }, tooltip: { valueSuffix: '°F'}},
 	series2 = { name: 'Sunroom',            color: displayColors[2], animation: false,
-			 data: [],
-			//dashStyle: 'shortdot',
-			marker: { enabled: false },
-			 tooltip: { valueSuffix: '°F'}},
+                    data: [], marker: { enabled: false }, tooltip: { valueSuffix: '°F'}},
 	series3 = { name: 'Study',              color: displayColors[6], animation: false,
-			 data: [],
-			//dashStyle: 'shortdot',
-			marker: { enabled: false },
-			tooltip: { valueSuffix: '°F'}},
+                    data: [], marker: { enabled: false }, tooltip: { valueSuffix: '°F'}},
 	series4 = { name: 'Studio',             color: displayColors[4], animation: false,
-			data: [],
-			//dashStyle: 'shortdot',
-			marker: { enabled: false },
-			 tooltip: { valueSuffix: '°F'}},
+                    data: [], marker: { enabled: false }, tooltip: { valueSuffix: '°F'}},
 	series5 = { name: 'Attic',              color: displayColors[7], animation: false,
-			data: [],
-			//dashStyle: 'shortdot',
-			marker: { enabled: false },
-			tooltip: { valueSuffix: '°F'}},
+                    data: [], marker: { enabled: false }, tooltip: { valueSuffix: '°F'}},
 	series6 = { name: 'Dewpoint Out',       color: displayColors[0], animation: false,
-			data: [],
-			dashStyle: 'shortdot',
-			marker: { enabled: false },
-			tooltip: { valueSuffix: '°F'}},
+                    data: [], marker: { enabled: false }, tooltip: { valueSuffix: '°F'}, dashStyle: 'shortdot' },
 	series7 = { name: 'Dewpoint In',        color: displayColors[1], animation: false,
-			data: [],
-			dashStyle: 'shortdot',
-			marker: { enabled: false },
-			tooltip: { valueSuffix: '°F'}},			
+                    data: [], marker: { enabled: false }, tooltip: { valueSuffix: '°F'}, dashStyle: 'shortdot' },
 	series8 = { name: 'Pressure',           color: displayColors[5], animation: false,
-			data: [],
-			yAxis: 1,
-			dashStyle: 'longdash',
-			marker: { enabled: false }, 
-			tooltip: { valueDecimals:2, valueSuffix: ' in'}}, 
-	series9 = { name: 'Fuel Cost',          color: displayColors[5], animation: false,
-			type: 'area',
-			yAxis: 2,
-                        data: [],
-			step: true,
-			marker: { enabled: false },
-                        tooltip: { valueDecimals: 2, valuePrefix: '$' }},
-	series10 = { name: 'Electricity Usage', color: displayColors[3], animation: false,
-			data: [],
-			yAxis: 3,
-			type: 'area',
-			step: true,
-			marker: { enabled: false }, 
-			tooltip: { valueSuffix: ' Watts'}},
-	series11 = { name: 'In/Out Diff',       color: displayColors[7], animation: false,
-			yAxis: 4,
-                        data: [],
-			//step: true,
-			dashStyle: 'shortdot',
-			marker:  { enabled: false },
-                        tooltip: { valueSuffix: '°F'} };			
+                    data: [], marker: { enabled: false }, tooltip: { valueDecimals:2, valueSuffix: ' in'},
+		   yAxis: 1, dashStyle: 'longdash'   }, 
+	series9 = { name: 'Fuel Cost',          color: 'rgba(120,113,116, 0.55)', animation: false, fillOpacity: .3,
+                    data: [], marker: { enabled: false }, tooltip: { valueDecimals: 2, valuePrefix: '$' },
+                   yAxis: 2, type: 'area', step: true },
+	series10 ={ name: 'Electricity Usage', color: 'rgba(128,133,233, 0.45)',  animation: false, fillOpacity: .15,
+                     data: [], marker: { enabled: false }, tooltip: { valueSuffix: ' Watts'},
+                    yAxis: 3, type: 'area', step: true },
+	series11 ={ name: 'In/Out Diff',       color: displayColors[7], animation: false,
+                    data: [], marker:  { enabled: false }, tooltip: { valueSuffix: '°F'}, dashStyle: 'shortdot',
+                   yAxis: 4 };
+			
  $(document).ready(function() {  
  
  $.get('rtl-wx-latest.csv', function(data) {
-     // rtl-wx-latest.csv has just one data record with latest information from all sensors plus some calculated energy values.
-     // The extra data means the format is differentfrom the other 'timed' csv files.
+     // rtl-wx-latest.csv has one data record with the latest rtl-wx information from all sensors plus some calculated energy values.
+     // The extra data means the format is different from the other csv files.
      //  index:    0         1                    2                      3                        4               5                6                   7                             8                  9          
      //             Time,efergyWatts,efergyLastHr,efergyLastDay,owlWatts,owlLastHr,owlLastDay,fuelGallonsLastHr,fuelLastDay,fuelTotal,
      //            oduTemp,oduDewpoint,iduTemp,iduDewpoint,ext1Temp,ext1Dewpoint,ext2Temp,ext2Dewpoint,ext3Temp,ext3Dewpoint,ext4Temp,ext4Dewpoint,iduSealevelPressure
@@ -222,8 +209,8 @@
 	  if(!isNaN(timestamp)) {
 		efergywatts = parseFloat(items[1]);
 		efergyLastDay = Math.round((parseFloat(items[3])/1000*24)*10)/10;
-		fuelCostLastHr = Math.round(parseFloat(items[7])*3.50*100)/100;
-		fuelCostLastDay = Math.round(parseFloat(items[8])*3.50*100)/100;
+		fuelCostLastHr = Math.round(parseFloat(items[7])*fuelCostPerGallon*100)/100;
+		fuelCostLastDay = Math.round(parseFloat(items[8])*fuelCostPerGallon*100)/100;
 		oduTemp = parseFloat(items[10]);
 		oduDewpoint = parseFloat(items[11]);
 		iduTemp = parseFloat(items[12]);
@@ -249,60 +236,65 @@
      gSunroom.refresh(ext1Temp, "Dewpoint "+ext1Dewpoint+"°");          
      gAttic.refresh(ext2Temp, "Dewpoint "+ext2Dewpoint+"°");
      gBedroom.refresh(ext3Temp, "Dewpoint "+ext3Dewpoint+"°");          
-     gStudy.refresh(ext4Temp, "Dewpoint "+ext4Dewpoint+"°");      
+     gStudy.refresh(ext4Temp, "Dewpoint "+ext4Dewpoint+"°");
+     
+     // For Electric and Fuel gauges, the main gauge reading is determined here,  but the 'Last Day' text will be replaced with
+     // a 'Total $' calculation that's updated based on the selected chart range  (eg 1 day, 3 days, week etc).
      gElectric.refresh(efergywatts, "Last Day "+efergyLastDay+"kW");
-     gOil.refresh(fuelCostLastHr, "Last Day $"+fuelCostLastDay);
+     gFuel.refresh(fuelCostLastHr, "Last Day $"+fuelCostLastDay);
+     gaugeElectricityUsage = efergywatts;    
+     gaugeFuelCost = fuelCostLastHr;
  
+     // Set the time updated text at top right of window
      var options = {weekday: "short", year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "numeric"};
      $('.titleDateText').text('Updated: '+ new Date(lastTimestamp).toLocaleString("en-US",options));
     }); // $get... gauge data
 
- loadChartDataFromFile(true, 0, 0);
+ // Load the initial chart dataset (dataset index 0) from a csv file and select button 6 (3 day)
+ loadChartDataFromFile(true, 6, 0);
     
  $('.choice').change(function() {
-	// When a checkbox is changed, check to see if a new dataset needs to get loaded or activated
-            var currentBox = $(this);
-            var isChecked = currentBox.is(':checked');
-            var wasChecked = currentBox.data("wasChecked");
-            var value = $(this).val();
-
-            if (!wasChecked && isChecked) {
-		var series;
-                if (value == "AtticTemp")
-		   series = chart.addSeries(series5);
-		else if (value == "OutDewpoint")
-		   series = chart.addSeries(series6);
-		else if (value == "InDewpoint")
-		   series = chart.addSeries(series7);
-		else if (value == "Pressure")
-		   series = chart.addSeries(series8);
-		else if (value == "FuelCost")
-		   series = chart.addSeries(series9);
-		else if (value == "ElectricityUsage")
-		   series = chart.addSeries(series10);
-		else if (value == "InOutTempDiff")
-		   series = chart.addSeries(series11);
-		   currentBox.data("series", series);
-            }
+   // When a checkbox is changed, a series probably needs to be added or removed from the chart
+   var currentBox = $(this);
+   var isChecked = currentBox.is(':checked');
+   var wasChecked = currentBox.data("wasChecked");
+   var value = $(this).val();
+   
+   if (!wasChecked && isChecked) {
+     var series;
+     if (value == "AtticTemp")
+       series = chart.addSeries(series5);
+     else if (value == "OutDewpoint")
+       series = chart.addSeries(series6);
+     else if (value == "InDewpoint")
+       series = chart.addSeries(series7);
+     else if (value == "Pressure")
+       series = chart.addSeries(series8);
+     else if (value == "FuelCost")
+       series = chart.addSeries(series9);
+    else if (value == "ElectricityUsage")
+       series = chart.addSeries(series10);
+    else if (value == "InOutTempDiff")
+       series = chart.addSeries(series11);
+    currentBox.data("series", series);
+   }
             
-            if (wasChecked && !isChecked) {
-		var series = currentBox.data("series");
-                series.remove();
-            }
-            if (isChecked) 
-	       currentBox.data("wasChecked", true);
-            else 
-               currentBox.data("wasChecked", false); 	
+   if (wasChecked && !isChecked)
+      currentBox.data("series").remove();
+   if (isChecked) 
+      currentBox.data("wasChecked", true);
+   else 
+      currentBox.data("wasChecked", false); 	
  }); // checkbox changed 
     
  }); // Document.ready...
 
- function loadChartDataFromFile(initChartFlag, oldDataSetIndex, newDataSetIndex) {
+ function loadChartDataFromFile(initChartFlag, buttonIdx, newDataSetIndex) {
 
  chartDataSets[newDataSetIndex].state = 'loading';
  currentDataSetIndex = newDataSetIndex;
 
- // Get  the data csv file from the server asynchronously and process the data line by line in the callback
+ // Get  the csv file from the server asynchronously and process the data line by line in the callback
  $.get(chartDataSets[newDataSetIndex].filename, function(data) {
    var efergywatts, fuelCost, oduTemp, oduDewpoint, iduTemp, iduDewpoint,
      ext1Temp, ext1Dewpoint, ext2Temp, ext2Dewpoint, ext3Temp, ext3Dewpoint, ext4Temp, ext4Dewpoint, 
@@ -313,15 +305,15 @@
    $.each(lines, function(lineNo, line) {    
 	if (lineNo > 1) { // Skip over header line
 	  var items = line.split(',');
-	  var timestamp = parseFloat(items[0])*1000;
-	  //var startTimestamp = (1426536900*1000) - (3600*24*60*1000);	  // for debug - used with large static test datasets (eg 10k, 35k, 50k)
+	  var timestamp = (parseFloat(items[0])-60)*1000; // Subtract 1 minute from timestamp because samples are timestamped at time sample end+1
+	  //var startTimestamp = (1426536900*1000) - (3600*24*60*1000);	     // Debug -  used with large static test datasets (eg 10k, 35k, 50k)
 	  var startTimestamp=0;
 	  if (initChartFlag == true)
-		startTimestamp = new Date().getTime()-(3600*24*3.2*1000); // Load 3 days worth of data  at start
+		startTimestamp = new Date().getTime()-(3600*24*3.2*1000); // Only process 3 days worth of data at startup to speed up page load
 	  if(!isNaN(timestamp) && (timestamp >= startTimestamp)) {
 		efergywatts = parseInt(items[1]);
 		owlwatts = parseInt(items[2]);
-		fuelCost = parseFloat(items[3])*3.50;
+		fuelCost = parseFloat(items[3])*fuelCostPerGallon; // Convert gallons to dollars
 		oduTemp = parseFloat(items[4]);
 		oduDewpoint = parseFloat(items[5]);
 		iduTemp = parseFloat(items[6]);
@@ -336,7 +328,7 @@
 		ext4Dewpoint = parseFloat(items[15]);
 		iduPressure = parseFloat(items[16]);
 		
-		tempDiff = Math.abs(oduTemp-((ext1Temp+ext3Temp+ext4Temp)/3));
+		tempDiff = Math.abs(oduTemp-((ext1Temp+ext3Temp+ext4Temp)/3)); // outdoor minus average of (sunroom+bedroom+study)
 		tempDiff = Math.round(tempDiff * 10) / 10;
 		
 		chartDataSets[newDataSetIndex].data0.push([timestamp, oduTemp]);  // Outside
@@ -346,7 +338,7 @@
 		chartDataSets[newDataSetIndex].data4.push([timestamp, iduTemp]);  // Studio
 		chartDataSets[newDataSetIndex].data5.push([timestamp, ext2Temp]); // Attic
 		chartDataSets[newDataSetIndex].data6.push([timestamp, oduDewpoint]); // Outside Dewpoint
-		chartDataSets[newDataSetIndex].data7.push([timestamp, ext3Dewpoint]); // Inside Dewpoint
+		chartDataSets[newDataSetIndex].data7.push([timestamp, ext3Dewpoint]); // Inside Dewpoint - Use bedroom sensor
 		chartDataSets[newDataSetIndex].data8.push([timestamp, iduPressure]); 
 		chartDataSets[newDataSetIndex].data9.push([timestamp, fuelCost]); 
 		chartDataSets[newDataSetIndex].data10.push([timestamp, efergywatts]); 
@@ -357,7 +349,7 @@
 
      chartDataSets[newDataSetIndex].state = 'ready';
      if (initChartFlag == true) {
-        // initialize the chart
+        // initialize the chart if this is the first time through
 	series0.data = chartDataSets[newDataSetIndex].data0;
 	series1.data = chartDataSets[newDataSetIndex].data1;
 	series2.data = chartDataSets[newDataSetIndex].data2;
@@ -368,10 +360,10 @@
 	series7.data = chartDataSets[newDataSetIndex].data7;
 	series8.data = chartDataSets[newDataSetIndex].data8;
 	series9.data = chartDataSets[newDataSetIndex].data9;
-	series10.data = chartDataSets[newDataSetIndex].data10;
-	series11.data = chartDataSets[newDataSetIndex].data11;
+	series10.data =chartDataSets[newDataSetIndex].data10;
+	series11.data =chartDataSets[newDataSetIndex].data11;
 
-	// For performance reasons, load only some of the available data series.  The rest can be loaded by user  later by checking boxes
+	// To reduce load time and clutter, only activate 5 of the available data series.  The rest can be added to the chart by the user checking boxes
 	options.series.push(series0); 
 	options.series.push(series1); 
 	options.series.push(series2); 
@@ -380,15 +372,21 @@
 
 	// Create the chart
 	chart = new Highcharts.Chart(options);
-	chart.rangeSelector.clickButton(6, chart.rangeSelector.buttonOptions[6], true); // select 3 day range
+	
+	// select 3 day button to start
+	// Bug Alert - For some reason, the static chart options 'selected' index MUST be different from buttonIdx for chart initialization to work right. 
+	chart.rangeSelector.clickButton(buttonIdx, chart.rangeSelector.buttonOptions[buttonIdx], true); 
      } else 
-       swapChartDataSet(oldDataSetIndex, newDataSetIndex);
+       swapChartDataSet(buttonIdx, newDataSetIndex);
 
     }); // $get... chart data
  }; // loadChartDataFromFile()
  
- function swapChartDataSet(oldDataSetIndex, newDataSetIndex) {
-   //alert('setting data set to ' + chartDataSets[newDataSetIndex].filename);
+ function swapChartDataSet(buttonIdx, newDataSetIndex) {
+   
+   // User has selected a different range button that calls for a different chart dataset to be activated.
+   // For example, changed selected button from 3-day to 1-week, which swaps out the 15minute dataset  and uses
+   // the 1 hour dataset instead.  This function  assumes that the new dataset is loaded and is ready to activate.
    currentDataSetIndex = newDataSetIndex;
    series0.data = chartDataSets[newDataSetIndex].data0;
    series1.data = chartDataSets[newDataSetIndex].data1;
@@ -400,41 +398,24 @@
    series7.data = chartDataSets[newDataSetIndex].data7;
    series8.data = chartDataSets[newDataSetIndex].data8;
    series9.data = chartDataSets[newDataSetIndex].data9;
-   series10.data = chartDataSets[newDataSetIndex].data10;
-   series11.data = chartDataSets[newDataSetIndex].data11;
+   series10.data =chartDataSets[newDataSetIndex].data10;
+   series11.data =chartDataSets[newDataSetIndex].data11;
 
+   // Remove all the series from the chart
    while( chart.series.length > 0 ) {
      chart.series[0].remove( false );
    }
    
+   // Now re-add the series with the new dataset
    chart.addSeries(series0, false);
    chart.addSeries(series1, false);
    chart.addSeries(series2, false);
    chart.addSeries(series3, false);
    chart.addSeries(series4, false);
 
-   // Determine new  xAxis xmin and xmax based on selected range button
-   var rangeOptions = chart.rangeSelector.buttonOptions[chart.rangeSelector.selected];
-   var days;
-   if (rangeOptions.type == 'day') {
-     days = rangeOptions.count;
-   } else if (rangeOptions.type == 'week') {
-     days = rangeOptions.count * 7;
-   } else if (rangeOptions.type == 'month') {
-     days = rangeOptions.count * 30;
-   } else {
-     days = Number.MAX_VALUE; //  All   
-   }
-   var max = new Date().getTime();
-   var min = max - (3600*24*days*1000);
-   if (min < chartDataSets[newDataSetIndex].data0[0][0])
-     min = chartDataSets[newDataSetIndex].data0[0][0];
-   var chartMax= chartDataSets[newDataSetIndex].data0[chartDataSets[newDataSetIndex].data0.length-1][0]
-   if (max > chartMax)
-      max = chartMax;
-
-   // Change type of electric and oil series based on chart interval. If All button is selected) interval is daily, otherwise use area chart
-   if (days == Number.MAX_VALUE) {
+   // Change type of electric and oil series based on chart interval. selected.
+   // If the All button is selected, the interval is daily and columns are used, otherwise use area chart
+   if (chart.rangeSelector.buttonOptions[buttonIdx].type == 'all') {
       series9.type = 'column';
       series10.type = 'column';
    } else {
@@ -442,7 +423,7 @@
       series10.type = 'area';
    }  
       
-   // Add seies associated with any selected checkboxes and save the series in the checkbox obj so series can be removed on uncheck
+   // Add series for any selected checkboxes and save the series in the checkbox obj so it can be removed on uncheck action
    var series;
    if ($('#AtticTemp').is(':checked')) {
      series = chart.addSeries(series5, false);
@@ -460,61 +441,115 @@
      series = chart.addSeries(series8, false);
      $('#Pressure').data("series", series);
    }
-   if ($('#FuelCost').is(':checked')) {
-     series = chart.addSeries(series9, false);
-     $('#FuelCost').data("series", series);
-   }
    if ($('#ElectricityUsage').is(':checked')) {
      series = chart.addSeries(series10, false);
      $('#ElectricityUsage').data("series", series);
    }
+   if ($('#FuelCost').is(':checked')) {
+     series = chart.addSeries(series9, false);
+     $('#FuelCost').data("series", series);
+   }
+
    if ($('#InOutTempDiff').is(':checked')) {
      series = chart.addSeries(series11, false);
      $('#InOutTempDiff').data("series", series);
    }
-      
-   chart.xAxis[0].setExtremes(min, max, false);
-   chart.redraw();  
+
+   // Now that new data is loaded, recalculate min and max and set those so chart doesn't get confused
+   recalculateDateAxisExtremes(buttonIdx, true);
+   
+   // call to clickButton gets the button 'selected' and sets up some highstock internal vars
+   chart.rangeSelector.clickButton(buttonIdx, chart.rangeSelector.buttonOptions[buttonIdx], false);
+
  }; // swap chart data set
-
- function afterSetExtremes(e) {
  
-        if (('rangeSelectorButton' in e) == false)
-	  return; // callback invoked for  reason other than range selector button press
-
-	var newIndex = currentDataSetIndex;
+ function recalculateDateAxisExtremes(buttonIdx, redraw) {
+   // Determine number of days in the newly specified range
+   var rangeOptions = chart.rangeSelector.buttonOptions[buttonIdx];
+   var days;
+   if (rangeOptions.type == 'day') {
+     days = rangeOptions.count;
+   } else if (rangeOptions.type == 'week') {
+     days = rangeOptions.count * 7;
+   } else if (rangeOptions.type == 'month') {
+     days = rangeOptions.count * 30;
+   } else {
+     days = Number.MAX_VALUE; //  All   
+   }
+   
+   var max = new Date().getTime();
+   var min = max - (3600*24*days*1000);
+   if (min < chartDataSets[currentDataSetIndex].data0[0][0])
+     min = chartDataSets[currentDataSetIndex].data0[0][0];
+   var chartMax= chartDataSets[currentDataSetIndex].data0[chartDataSets[currentDataSetIndex].data0.length-1][0];
+   if (max > chartMax)
+      max = chartMax;
+   chart.xAxis[0].max = max;
+   chart.xAxis[0].setExtremes(min, max, redraw);
+ }
+ function rangeButtonClick(buttonIdx) {
+        
+	// Figure out the index for the data set for the newly clicked button .  Also, update the xAxis number format based on the button/range selected
+	var newDataSetIndex = currentDataSetIndex;
 	var newDayFormat;
-	if (e.rangeSelectorButton.type == 'day') {
-	   newIndex = 0;
+	if (chart.rangeSelector.buttonOptions[buttonIdx].type == 'day') {
+	   newDataSetIndex = 0;
 	   newDayFormat = '<b>%A</b>';
-	} else if (e.rangeSelectorButton.type == 'week') {
-	   newIndex = 1;
+	} else if (chart.rangeSelector.buttonOptions[buttonIdx].type == 'week') {
+	   newDataSetIndex = 1;
 	   newDayFormat = '%a %b %e';
-	} else if (e.rangeSelectorButton.type == 'month') {
-	   newIndex = 1;
+	} else if (chart.rangeSelector.buttonOptions[buttonIdx].type == 'month') {
+	   newDataSetIndex = 1;
 	   newDayFormat = '%b %e';
 	} else {
-	   newIndex = 2;
+	   newDataSetIndex = 2;
 	   newDayFormat = '%b %e';
 	}
 	chart.xAxis[0].update({ dateTimeLabelFormats: { day : newDayFormat } }, false);
 	
-	if (newIndex != currentDataSetIndex) {
-	  // Need to replace chart data but use timeout function to let chart event processing finish up first
-	  // Without the timeout,  rangeselector button state won't be updated completely which causes problems in swapChartDataSet
-	  setTimeout(function(){
-	   if (chartDataSets[newIndex].state == 'init')
-	    loadChartDataFromFile(false, currentDataSetIndex, newIndex);
-	   else if (chartDataSets[newIndex].state == 'ready')
-	    swapChartDataSet(currentDataSetIndex, newIndex);
+	if (newDataSetIndex != currentDataSetIndex) {
+	   if (chartDataSets[newDataSetIndex].state == 'init')
+	    loadChartDataFromFile(false, buttonIdx, newDataSetIndex);
+	   else if (chartDataSets[newDataSetIndex].state == 'ready')
+	    swapChartDataSet(buttonIdx, newDataSetIndex);
 	   else {
-	    // probably still waiting for  last load operation to complete (state == loading)
-	    alert('Waiting for file '+ chartDataSets[newDataSetIndex].filename + ' to load...');
+	    // Don't normally get here... If we do, we're probably  waiting for  last csv file get to finish (state == loading)
+	    alert('Loading file '+ chartDataSets[newDataSetIndex].filename + '... Please Wait');
 	   } 
-	  }, 1); // setTimeout
 	}
-	else
-	  chart.redraw();
+	else {
+	  // KLUDGE ALERT - sestting xAxis[0].max prevents the clickButton call below from incorrectly setting up the maximum value for the range.
+	  // In  the highcharts source (v 2.0.4),  clickButton() function call,  xAxis[0].max is null and this causes  newMax (source line 20758) to be set to 0. 
+          // With the daily buttons, this causes newMax and newMin to get messed up  ((source line 20789 (newMin = mathMax(newMax - range, dataMin);
+	  chart.xAxis[0].max = chart.xAxis[0].dataMax; 
+	  chart.rangeSelector.clickButton(buttonIdx, chart.rangeSelector.buttonOptions[buttonIdx], true);
+	}
+}
+ function updateFuelAndElectricGaugeTotals(min, max) {
+   // Update the electricity and fuel gauges with the total cost of consumption over the selected time interval
+   var i;
+   var totalFuelAmount=0;
+   var totalElectricityUsage=0;
+   for (i=0; i<chartDataSets[currentDataSetIndex].data0.length;i++) {
+     // If current data samples is within the range of the selection, count it.
+     if ((chartDataSets[currentDataSetIndex].data0[i][0] >= min) && 
+          chartDataSets[currentDataSetIndex].data0[i][0] <= max) {
+	  totalFuelAmount += chartDataSets[currentDataSetIndex].data9[i][1];
+	  totalElectricityUsage += chartDataSets[currentDataSetIndex].data10[i][1];
+     }
+   }
+   totalFuelAmount = Math.round(totalFuelAmount*100)/100;
+   
+   // total electricity  cost = kwhs used times the number of hours in each  sample * cost per kwh
+   totalElectricityUsage = (totalElectricityUsage/1000)*chartDataSets[currentDataSetIndex].intervalHours*electricityCostPerKWH;
+   totalElectricityUsage = Math.round(totalElectricityUsage*100)/100;
+   gElectric.refresh(gaugeElectricityUsage, "Total $"+totalElectricityUsage);
+   gFuel.refresh(gaugeFuelCost, "Total $"+totalFuelAmount); 
+  }; 
+ function afterSetExtremes(e) {
+    // Any time a button is clicked or a custom range is manually selected, update the total cost
+    // on the electricity and fuel gauges
+    updateFuelAndElectricGaugeTotals(e.min, e.max);
   };
  
  </script></head>
@@ -534,8 +569,8 @@
 <input type="checkbox" class="choice" name="choice" id="OutDewpoint" value="OutDewpoint">Dewpoint Outside&nbsp;
 <input type="checkbox" class="choice" name="choice" id="InDewpoint" value="InDewpoint">Dewpoint Inside&nbsp;
 <input type="checkbox" class="choice" name="choice" id="Pressure" value="Pressure">Barometric Pressure&nbsp;
-<input type="checkbox" class="choice" name="choice" id="FuelCost" value="FuelCost">Oil Consumption&nbsp;
 <input type="checkbox" class="choice" name="choice" id="ElectricityUsage" value="ElectricityUsage">Electricity Usage&nbsp;
+<input type="checkbox" class="choice" name="choice" id="FuelCost" value="FuelCost">Oil Consumption&nbsp;
 <input type="checkbox" class="choice" name="choice" id="InOutTempDiff" value="InOutTempDiff">In-Out Temp Diff
 </form></div></div>
 </body>
