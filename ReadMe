@@ -17,7 +17,7 @@ Tested Hardware setups
 - 4GB Class 10 SD card with Raspbian GNU/Linux 7, wheezy installed.
 - NooElec NESDR Mini USB RTL-SDR & ADS-B Receiver Set, RTL2832U & R820T Tuner
 - Oregon Scientific 433Mhz weather sensors (several v2.1 & v3 models tested)
-- Efergy Elite TPM Electricity sensor
+- Efergy Elite TPM Electricity sensor (connected to mains)
 - Owl CM119A Electricity sensor (connected to oil burner circuit to monitor oil consumption)
 - Gigaware 720p HD Desktop Web Cam (from eBay)
 
@@ -26,7 +26,7 @@ Tested Hardware setups
 - 1GB USB flash drive in front (usb 3.0) port with /Opt /Jffs and /Swap partitions automounted
 - NooElec NESDR Mini USB RTL-SDR & ADS-B Receiver Set, RTL2832U & R820T Tuner
 - Oregon Scientific 433Mhz weather sensors (several v2.1 & v3 models tested)
-- (Haven't yet tested Efergy sensor with Netgear router - I think it should work but require recompile)
+- Efergy Elite TPM Electricity sensor (connected to mains)
 - Owl CM119A Electricity sensor (connected to oil burner circuit to monitor oil consumption)
 - NOTE: Webcam and FTP functionality not supported/tested on R7000
 
