@@ -34,7 +34,7 @@ Tested with these Oregon Scientific 433Mhz sensors
   - OS protocol v2.1 - THGR968, BTHR968, THGR268, RGR968
   - OS protocol v3   - THGR810
 Tested with these 433Mhz electricity sensors
-  - Efergy True Power Monitor (TPM) (On Raspberry Pi only)
+  - Efergy Elite TPM (True Power Monitor)
   - Owl CM119A 
   
 Multiple OS sensor models use the same sensor ids and message format, so some sensors not listed here may also work.  For example the THGR122N and THGN123N seem to use the same sensor id and layout as the THGR268 (id 0x1d20). The code almost supports the WMR968 wind gauge, but since mine is broken, more work is needed.  To add support for new sensors, change code in appropriate low level Oregon Scientific v2.1 and v3 protocol parsing routine in src/rtl-433.c and in message decode logic in src/rtl-wx.c.
