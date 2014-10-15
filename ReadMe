@@ -11,9 +11,7 @@ It depends on the following projects:
  - libusb-1.0 (http://libusb.info/) is linked as a shared dynamic library
  - librtlsdr (https://github.com/steve-m/librtlsdr/releases) is linked as a static library
  
-The example web page (www/rtl-wx.htm) uses the HighStock charting library, which requires a
-paid license for commercial use.  The example web page also uses the JustGage library which
-is licensed under the MIT license.  See highcharts.com and JustGage.com for more information.
+The example web page (www/rtl-wx.htm) uses the HighStock charting library, which requires a paid license for commercial use.  The example web page also uses the JustGage library which is licensed under the MIT license.  See highcharts.com and JustGage.com for more information.
 
 Tested Hardware setups
 1) Raspberry Pi
