@@ -1,6 +1,11 @@
 This folder contains the program's main configuration file, a log file, and several web page files.
 
 - Edit rtl-wx.conf to configure program options
+- Edit rtl-wx.htm to cusomize it for your specific sensor configuration
 
-Note: misc/header.in is used as a template in Makefile to generate misc/header.htm, which has build date and platform name embedded.
+There are two different web sites contained in this folder that can be served by the system web server (apache2 on Raspberry Pi, lighttpd on the R7000).  There's a debugging/monitoring web console that can be accessed through misc/index.htm.  This website uses multiple html and cgi files to interact with the running rtl-wx server program and is meant for debugging only.
+
+Day to day visualization of sensor data is supported through rtl-wx.htm.  rtl-wx.htm reads csv files produced by the server and displays them.  There's no real-time interaction between rtl-wx.htm and the running rtl-wx server.  rtl-wx.htm is a mostly client side webpage that uses 'gets' to the server to read csv files and display them.
+
+Note: misc/header.in is used as a template in src/Makefile to generate misc/header.htm.  This file is used by the debugging web console and has build date and platform name embedded.
 
