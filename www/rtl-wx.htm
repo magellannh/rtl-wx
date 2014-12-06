@@ -3,12 +3,34 @@
 <style>
   body { text-align: center; }
   .titleText { font-family: Arial; font-size:20px; margin-bottom: 4px; float: clear; }
-  .titleDateText { font-family: Arial; font-size:11px; float: right; width:190px; }
-  .titleDateFiller { font-family: Arial; font-size:11px; float: left; width: 190px; }
-  .justGauge { width:105px; height:84px; display: inline-block; }
+  .titleDateText { font-family: Arial; font-size:11px; float: right; width:210px; }
+  .titleDateFiller { font-family: Arial; font-size:11px; float: left; width: 210px; }
+  .justGauge { width:105px; height:84px; display: inline-block; position: relative; }
   .justGaugeFiller { width:50px; height:84px;display: inline-block; }
   #controlPanel { height: 15px; }
   .chartOptions { font-family: Arial; font-size:11px; text-align: center; }
+.hover {  z-index: 50; width:105px; height:84px; position: relative; top: -80px; }
+.tooltip { /* hide and position tooltip */
+  position: absolute; left: 0px; top: 15px;
+  background-color:white;
+  color:black;
+  font-family: Arial; font-size:11px; text-align: center;
+  border-radius:5px;
+  border-color: LightSteelBlue; box-shadow: 3px 3px 2px #888888;
+  border-style: solid; border-width: 1px;
+  opacity:0;
+  -webkit-transition: opacity 0.5s;
+  -moz-transition: opacity 0.5s;
+  -ms-transition: opacity 0.5s;
+  -o-transition: opacity 0.5s;
+  transition: opacity 0.5s;
+}
+
+.hover:hover .tooltip { /* display tooltip on hover */
+    opacity:1;
+}
+}
+
 </style>
 <head>
 <!-- Importing required js-Files -->
@@ -21,7 +43,7 @@
 <script type="text/javascript">
 
    // Adjust these 2 fuel and electriicty cost vars with updated unit cost with current pricing
-   var fuelCostPerGallon = 3.00, electricityCostPerKWH = .15;
+   var fuelCostPerGallon = 3.00, electricityCostPerKWH = .17;
    
    var gaugeFuelCost, gaugeElectricityUsage;
    
@@ -76,6 +98,7 @@
 		          this.rangeSelector.buttons[5].on('click', function(e) { rangeButtonClick(5); });
 		          this.rangeSelector.buttons[6].on('click', function(e) { rangeButtonClick(6); });
 		          this.rangeSelector.buttons[7].on('click', function(e) { rangeButtonClick(7); });
+		          this.rangeSelector.buttons[8].on('click', function(e) { rangeButtonClick(8); });
 			  } } 
 			  }, 
 	title: { text: '' },     
@@ -85,6 +108,7 @@
 	rangeSelector:{ enabled:true, inputEnabled: false,                     
 	    buttonTheme: { width : 55 }, selected: 0, allButtonsEnabled: true,
 	    buttons: [ 
+	     { type: 'all', text: 'Totals' }, 
 	     { type: 'all', text: 'All' }, 
 	     { type: 'month', count: 6, text: '6 Months' }, 
 	     { type: 'month', count: 3, text: '3 Months' }, 
@@ -92,7 +116,8 @@
 	     { type: 'week', count: 2, text: '2 Weeks' }, 
 	     { type: 'week', count: 1, text: '1 Week' }, 
 	     { type: 'day', count: 3, text: '3 Days' },
-	     { type: 'day', count: 1, text: '1 Day' }] },
+	     { type: 'day', count: 1, text: '1 Day' },
+	     ] },
 	// the value axis
 	yAxis: [{ // Primary yAxis 
 	     labels: {  style: { color: Highcharts.getOptions().colors[0] } },
@@ -149,16 +174,16 @@
    var chartDataSets = [ // State can be either 'init', 'loading',  'ready'
 	{ name: 'short',  state: 'init', filename: 'rtl-wx-15min.csv', intervalHours: .25,
 	  data0:[],data1:[],data2:[],data3:[],data4:[],data5:[],
-	  data6:[],data7:[],data8:[],data9:[],data10:[],data11:[]},
+	  data6:[],data7:[],data8:[],data9:[],data10:[],data11:[],data12:[]},
 	{ name: 'medium', state: 'init', filename: 'rtl-wx-1hr.csv', intervalHours: 1,
 	  data0:[],data1:[],data2:[],data3:[],data4:[],data5:[],
-	  data6:[],data7:[],data8:[],data9:[],data10:[],data11:[]},	
+	  data6:[],data7:[],data8:[],data9:[],data10:[],data11:[],data12:[]},	
 	{ name: 'long',   state: 'init', filename: 'rtl-wx-4hr.csv', intervalHours: 4,
 	  data0:[],data1:[],data2:[],data3:[],data4:[],data5:[],
-	  data6:[],data7:[],data8:[],data9:[],data10:[],data11:[] },
+	  data6:[],data7:[],data8:[],data9:[],data10:[],data11:[],data12:[] },
 	{ name: 'daily',   state: 'init', filename: 'rtl-wx-daily.csv', intervalHours: 24,
 	  data0:[],data1:[],data2:[],data3:[],data4:[],data5:[],
-	  data6:[],data7:[],data8:[],data9:[],data10:[],data11:[] }];
+	  data6:[],data7:[],data8:[],data9:[],data10:[],data11:[],data12:[] }];
    var currentDataSetIndex;
 
    // Predefine series objects for each data series used in the Highstocks chart
@@ -189,7 +214,9 @@
                     yAxis: 3, type: 'area', step: true },
 	series11 ={ name: 'In/Out Diff',       color: displayColors[7], animation: false,
                     data: [], marker:  { enabled: false }, tooltip: { valueSuffix: '°F'}, dashStyle: 'shortdot',
-                   yAxis: 4 };
+                   yAxis: 4 },
+	series12 = { name: 'Attic Dewpoint',   color: displayColors[7], animation: false,
+                    data: [], marker: { enabled: false }, tooltip: { valueSuffix: '°F'}, dashStyle: 'shortdot' };
 			
  $(document).ready(function() {  
  
@@ -264,8 +291,10 @@
    
    if (!wasChecked && isChecked) {
      var series;
-     if (value == "AtticTemp")
+     if (value == "AtticTemp") 
        series = chart.addSeries(series5);
+     else if (value == "AtticDewpoint")
+       series = chart.addSeries(series12);
      else if (value == "OutDewpoint")
        series = chart.addSeries(series6);
      else if (value == "InDewpoint")
@@ -291,7 +320,7 @@
  }); // checkbox changed 
  
   // Load the initial chart dataset (dataset index 0) from a csv file and select button 7 (1 day)
- loadChartDataFromFile(true, 7, 0);
+ loadChartDataFromFile(true, 8, 0);
  
  }); // Document.ready...
 
@@ -349,6 +378,7 @@
 		chartDataSets[newDataSetIndex].data9.push([timestamp, fuelCost]); 
 		chartDataSets[newDataSetIndex].data10.push([timestamp, efergywatts]); 
 		chartDataSets[newDataSetIndex].data11.push([timestamp, tempDiff]); 
+		chartDataSets[newDataSetIndex].data12.push([timestamp, ext2Dewpoint]); // Attic Dewpoint
 	  }
 	}
        }); // for each line in file
@@ -368,6 +398,7 @@
 	series9.data = chartDataSets[newDataSetIndex].data9;
 	series10.data =chartDataSets[newDataSetIndex].data10;
 	series11.data =chartDataSets[newDataSetIndex].data11;
+	series12.data =chartDataSets[newDataSetIndex].data12;
 
 	// To reduce load time and clutter, only activate 5 of the available data series.  The rest can be added to the chart by the user checking boxes
 	options.series.push(series0); 
@@ -408,6 +439,7 @@
    series9.data = chartDataSets[newDataSetIndex].data9;
    series10.data =chartDataSets[newDataSetIndex].data10;
    series11.data =chartDataSets[newDataSetIndex].data11;
+   series12.data =chartDataSets[newDataSetIndex].data12;
 
    // Remove all the series from the chart
    while( chart.series.length > 0 ) {
@@ -449,15 +481,20 @@
      $('#AtticTemp').data("series", series);
      $('#AtticTemp').data("wasChecked", true);
    }
+   if ($('#AtticDewpoint').is(':checked')) {
+     series = chart.addSeries(series12, false);
+     $('#AtticDewpoint').data("series", series);
+     $('#AtticDewpoint').data("wasChecked", true);
+   }
    if ($('#OutDewpoint').is(':checked')) {
      series = chart.addSeries(series6, false);
      $('#OutDewpoint').data("series", series);
-     $('#AtticTemp').data("wasChecked", true);
+     $('#OutDewpoint').data("wasChecked", true);
    }
    if ($('#InDewpoint').is(':checked')) {
      series = chart.addSeries(series7, false);
      $('#InDewpoint').data("series", series);
-     $('#AtticTemp').data("wasChecked", true);
+     $('#InDewpoint').data("wasChecked", true);
    }     
    if ($('#Pressure').is(':checked')) {
      series = chart.addSeries(series8, false);
@@ -503,7 +540,7 @@
    var chartMax= chartDataSets[currentDataSetIndex].data0[chartDataSets[currentDataSetIndex].data0.length-1][0];
    if (max > chartMax)
       max = chartMax;
-   chart.xAxis[0].max = max;
+   chart.xAxis[0].max = max; // probably not needed now that update() isn't getting used in button click function, but keep it just in case
    chart.xAxis[0].setExtremes(min, max, redraw);
  }
  
@@ -518,14 +555,16 @@
 	} else if (chart.rangeSelector.buttonOptions[buttonIdx].type == 'week') {
 	   newDataSetIndex = 1;
 	   newDayFormat = '%a %b %e';
-	} else if (chart.rangeSelector.buttonOptions[buttonIdx].type == 'month') {
+	} else if ((chart.rangeSelector.buttonOptions[buttonIdx].type == 'month') ||
+	           (chart.rangeSelector.buttonOptions[buttonIdx].text == 'All')) {
 	   newDataSetIndex = 2;
 	   newDayFormat = '%b %e';
-	} else {
+	} else { // Button is 'Summary'
 	   newDataSetIndex = 3;
 	   newDayFormat = '%b %e';
 	}
-	chart.xAxis[0].update({ dateTimeLabelFormats: { day : newDayFormat } }, false);
+	//chart.xAxis[0].update({ dateTimeLabelFormats: { day : newDayFormat } }, true);
+	chart.xAxis[0].options.dateTimeLabelFormats.day = newDayFormat;
 	
 	if (newDataSetIndex != currentDataSetIndex) {
 	   if (chartDataSets[newDataSetIndex].state == 'init')
@@ -541,7 +580,7 @@
 	  // KLUDGE ALERT - sestting xAxis[0].max prevents the clickButton call below from incorrectly setting up the maximum value for the range.
 	  // In  the highcharts source (v 2.0.4),  clickButton() function call,  xAxis[0].max is null and this causes  newMax (source line 20758) to be set to 0. 
           // With the daily buttons, this causes newMax and newMin to get messed up  ((source line 20789 (newMin = mathMax(newMax - range, dataMin);
-	  chart.xAxis[0].max = chart.xAxis[0].dataMax; 
+	  //DONT NEED THIS KLUDGE IF upate() isn't used above chart.xAxis[0].max = chart.xAxis[0].dataMax; 
 	  chart.rangeSelector.clickButton(buttonIdx, chart.rangeSelector.buttonOptions[buttonIdx], true);
 	}
 }
@@ -583,15 +622,16 @@
 <div id="gStudio" class="justGauge"></div>
 <div id="gAttic" class="justGauge"></div>
 <div class="justGaugeFiller"></div>
-<div id="gElectric" class="justGauge"></div>
-<div id="gOil" class="justGauge"></div> 
+<div id="gElectric" class="justGauge"><div class="hover"><span class="tooltip">Instantaneous electricity usage in watts (big text) and the total cost for the electricity used over the range selected in the graph.</span></div></div>
+<div id="gOil" class="justGauge"><div class="hover"><span class="tooltip">Cost of heating oil used over the last hour (big text) and total cost for oil used over the range selected in the graph.</span></div></div>
 <div id="chart" style="min-width: 310px; height:70%; margin: 0 auto"></div>
 <div id="controlPanel"><div class="chartOptions"><form action="">
-<input type="checkbox" class="choice" name="choice" id="AtticTemp" value="AtticTemp">Attic Temperature&nbsp;
-<input type="checkbox" class="choice" name="choice" id="OutDewpoint" value="OutDewpoint">Dewpoint Outside&nbsp;
-<input type="checkbox" class="choice" name="choice" id="InDewpoint" value="InDewpoint">Dewpoint Inside&nbsp;
-<input type="checkbox" class="choice" name="choice" id="Pressure" value="Pressure">Barometric Pressure&nbsp;
-<input type="checkbox" class="choice" name="choice" id="ElectricityUsage" value="ElectricityUsage" checked>Electricity Usage&nbsp;
+<input type="checkbox" class="choice" name="choice" id="AtticTemp" value="AtticTemp">Attic Temp&nbsp;
+<input type="checkbox" class="choice" name="choice" id="AtticDewpoint" value="AtticDewpoint">Attic Dewpoint&nbsp;
+<input type="checkbox" class="choice" name="choice" id="OutDewpoint" value="OutDewpoint">Outside Dewpoint&nbsp;
+<input type="checkbox" class="choice" name="choice" id="InDewpoint" value="InDewpoint">Inside Dewpoint&nbsp;
+<input type="checkbox" class="choice" name="choice" id="Pressure" value="Pressure">Pressure&nbsp;
+<input type="checkbox" class="choice" name="choice" id="ElectricityUsage" value="ElectricityUsage" checked>Electricity&nbsp;
 <input type="checkbox" class="choice" name="choice" id="FuelCost" value="FuelCost" checked>Heating Oil&nbsp;
 <input type="checkbox" class="choice" name="choice" id="InOutTempDiff" value="InOutTempDiff">In-Out Temp Diff
 </form></div></div>
