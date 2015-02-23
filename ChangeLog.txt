@@ -1,7 +1,14 @@
 RTL-Wx Home Monitoring software
 
-Version Info and Release
+Version Info and Release Notes
 
+02-23-2015 - v3.2
+  - Added code to DataStore.c so rtl-wx.htm real-time gauges wll display -99 if message from
+    associated sensor hasn't been received in the last 5 minutes.
+  - Suppressed  fprintf on corrupt OWL119 message received in rtl-wx.c.  Now printf only happens
+    if the  raw data dump mode is enabled to be sure console is connected.  Printing to stdout
+    without a console connected can cause app to hang if output buffer fills.
+  
 10-08-2014 - v3.1
   - Complete rewrite of rtl-wx.htm to incorporate HighStock charting package and JustGage gauge widgets.
   - Added CSV data logging capability (generated csv files are used by rtl-wx.htm)
