@@ -741,18 +741,40 @@ void WX_WriteSensorDataToCSVFile(char *csvFilename, WX_Data *weatherDatap, WX_Co
 
 // Create a single record CSV file with the latest sensor data
 void WX_WriteRealTimeCSVFile() {
+   int noDataSeconds = 300;
+   int noDataValue = -99;
+   
    int efergyWatts = wxData.energy.Watts;
    int efergyWattsLastHour = getWattsAvgAvg(1, 4);
    int efergyWattsLastDay  = getWattsAvgAvg(1, 24*4);
-
+   if (difftime(wxData.currentTime.timet, wxData.energy.Timestamp.timet)>noDataSeconds)
+      efergyWatts = noDataValue;
+      
    int owlWatts = wxData.owl.Watts;
    int owlWattsLastHour = getWattsAvgAvg(0, 4);
    int owlWattsLastDay = getWattsAvgAvg(0, 24*4);	 
-   
+   if (difftime(wxData.currentTime.timet, wxData.owl.Timestamp.timet)>noDataSeconds)
+      owlWatts = noDataValue;
+         
    float fuelBurnedLastHour = (float) getBurnerRunSecondsTotal(0, 4) /(60*60) * WxConfig.fuelBurnerGallonsPerHour;
    float fuelBurnedLastDay = (float) getBurnerRunSecondsTotal(0, 24*4) /(60*60) * WxConfig.fuelBurnerGallonsPerHour;
    float fuelBurnedTotal = (float) WX_totalBurnerRunSeconds/(60*60) * WxConfig.fuelBurnerGallonsPerHour;
-	
+	if (owlWatts == noDataValue)
+      fuelBurnedLastHour = noDataValue;
+      
+	float odu_temp = (difftime(wxData.currentTime.timet, wxData.odu.Timestamp.timet)>noDataSeconds)? noDataValue : wxData.odu.Temp*1.8+32;	
+	float odu_dew  = (difftime(wxData.currentTime.timet, wxData.odu.Timestamp.timet)>noDataSeconds)? noDataValue : wxData.odu.Dewpoint*1.8+32;
+	float idu_temp = (difftime(wxData.currentTime.timet, wxData.idu.Timestamp.timet)>noDataSeconds)? noDataValue : wxData.idu.Temp*1.8+32;	
+	float idu_dew  = (difftime(wxData.currentTime.timet, wxData.idu.Timestamp.timet)>noDataSeconds)? noDataValue : wxData.idu.Dewpoint*1.8+32;
+	float ext0_temp = (difftime(wxData.currentTime.timet, wxData.ext[0].Timestamp.timet)>noDataSeconds)? noDataValue : wxData.ext[0].Temp*1.8+32;	
+	float ext0_dew  = (difftime(wxData.currentTime.timet, wxData.ext[0].Timestamp.timet)>noDataSeconds)? noDataValue : wxData.ext[0].Dewpoint*1.8+32;
+	float ext1_temp = (difftime(wxData.currentTime.timet, wxData.ext[1].Timestamp.timet)>noDataSeconds)? noDataValue : wxData.ext[1].Temp*1.8+32;	
+	float ext1_dew  = (difftime(wxData.currentTime.timet, wxData.ext[1].Timestamp.timet)>noDataSeconds)? noDataValue : wxData.ext[1].Dewpoint*1.8+32;
+	float ext2_temp = (difftime(wxData.currentTime.timet, wxData.ext[2].Timestamp.timet)>noDataSeconds)? noDataValue : wxData.ext[2].Temp*1.8+32;	
+	float ext2_dew  = (difftime(wxData.currentTime.timet, wxData.ext[2].Timestamp.timet)>noDataSeconds)? noDataValue : wxData.ext[2].Dewpoint*1.8+32;
+	float ext3_temp = (difftime(wxData.currentTime.timet, wxData.ext[3].Timestamp.timet)>noDataSeconds)? noDataValue : wxData.ext[3].Temp*1.8+32;	
+	float ext3_dew  = (difftime(wxData.currentTime.timet, wxData.ext[3].Timestamp.timet)>noDataSeconds)? noDataValue : wxData.ext[3].Dewpoint*1.8+32;
+			
    char csvString[500];
    time_t timestamp = time(NULL);
    //                                             time  efergy               owl                   fuel                                         odu                          idu                          ext1                        ext2                         ext3                       ext4                         pressure
@@ -761,12 +783,8 @@ void WX_WriteRealTimeCSVFile() {
       efergyWatts,efergyWattsLastHour,efergyWattsLastDay,
       owlWatts,owlWattsLastHour,owlWattsLastDay, 
       fuelBurnedLastHour,fuelBurnedLastDay,fuelBurnedTotal,
-      wxData.odu.Temp*1.8+32, wxData.odu.Dewpoint*1.8+32, 
-      wxData.idu.Temp*1.8+32, wxData.idu.Dewpoint*1.8+32, 
-      wxData.ext[0].Temp*1.8+32, wxData.ext[0].Dewpoint*1.8+32, 
-      wxData.ext[1].Temp*1.8+32, wxData.ext[1].Dewpoint*1.8+32, 
-      wxData.ext[2].Temp*1.8+32, wxData.ext[2].Dewpoint*1.8+32, 
-      wxData.ext[3].Temp*1.8+32, wxData.ext[3].Dewpoint*1.8+32, 
+      odu_temp, odu_dew, idu_temp, idu_dew, 
+      ext0_temp, ext0_dew, ext1_temp, ext1_dew, ext2_temp, ext2_dew, ext3_temp, ext3_dew, 
       (wxData.idu.Pressure + wxData.idu.SeaLevelOffset)/33.8638866667);
      
    FILE *fd; 

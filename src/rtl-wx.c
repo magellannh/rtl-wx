@@ -536,8 +536,8 @@ void WX_process_owl_msg_error(unsigned char *msg, int length, float watts, float
       for (i=0 ; i<length; i++) 
          fprintf(outputfd, "%02x ", msg[i]); 
       fprintf(outputfd, " (Error Detected)\n");
+      fprintf(outputfd, " OWLCM119 Error: Current: %5.0f (watts) Total:%7.3f (kW)\n", watts, total_kwh);
    }
-   fprintf(outputfd, " OWLCM119 Error: Current: %5.0f (watts) Total:%7.3f (kW)\n", watts, total_kwh);
 
    wxData.BadPktCnt++;
 }

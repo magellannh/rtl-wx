@@ -201,7 +201,7 @@
                     data: [], marker: { enabled: false }, tooltip: { valueSuffix: '°F'}},
 	series6 = { name: 'Dewpoint Out',       color: displayColors[0], animation: false,
                     data: [], marker: { enabled: false }, tooltip: { valueSuffix: '°F'}, dashStyle: 'shortdot' },
-	series7 = { name: 'Dewpoint In',        color: displayColors[1], animation: false,
+	series7 = { name: 'Dewpoint In',        color: displayColors[2], animation: false,
                     data: [], marker: { enabled: false }, tooltip: { valueSuffix: '°F'}, dashStyle: 'shortdot' },
 	series8 = { name: 'Pressure',           color: displayColors[5], animation: false,
                     data: [], marker: { enabled: false }, tooltip: { valueDecimals:2, valueSuffix: ' in'},
@@ -266,6 +266,8 @@
      gStudio.refresh(iduTemp, "Dewpoint "+iduDewpoint+"°");          
      gSunroom.refresh(ext1Temp, "Dewpoint "+ext1Dewpoint+"°");          
      gAttic.refresh(ext2Temp, "Dewpoint "+ext2Dewpoint+"°");
+     document.getElementById("AtticTooltip").innerHTML = "Attic Uses <br/>Sensor Ext 2";
+
      gBedroom.refresh(ext3Temp, "Dewpoint "+ext3Dewpoint+"°");          
      gStudy.refresh(ext4Temp, "Dewpoint "+ext4Dewpoint+"°");
      
@@ -373,7 +375,7 @@
 		chartDataSets[newDataSetIndex].data4.push([timestamp, iduTemp]);  // Studio
 		chartDataSets[newDataSetIndex].data5.push([timestamp, ext2Temp]); // Attic
 		chartDataSets[newDataSetIndex].data6.push([timestamp, oduDewpoint]); // Outside Dewpoint
-		chartDataSets[newDataSetIndex].data7.push([timestamp, ext3Dewpoint]); // Inside Dewpoint - Use bedroom sensor
+		chartDataSets[newDataSetIndex].data7.push([timestamp, ext1Dewpoint]); // Inside Dewpoint - Use Sunrrom sensor
 		chartDataSets[newDataSetIndex].data8.push([timestamp, iduPressure]); 
 		chartDataSets[newDataSetIndex].data9.push([timestamp, fuelCost]); 
 		chartDataSets[newDataSetIndex].data10.push([timestamp, efergywatts]); 
@@ -620,7 +622,7 @@
 <div id="gSunroom" class="justGauge"></div>
 <div id="gStudy" class="justGauge"></div>
 <div id="gStudio" class="justGauge"></div>
-<div id="gAttic" class="justGauge"></div>
+<div id="gAttic" class="justGauge"><div class="hover"><span id="AtticTooltip" class="tooltip">Not initialized Yet!</span></div></div>
 <div class="justGaugeFiller"></div>
 <div id="gElectric" class="justGauge"><div class="hover"><span class="tooltip">Instantaneous electricity usage in watts (big text) and the total cost for the electricity used over the range selected in the graph.</span></div></div>
 <div id="gOil" class="justGauge"><div class="hover"><span class="tooltip">Cost of heating oil used over the last hour (big text) and total cost for oil used over the range selected in the graph.</span></div></div>

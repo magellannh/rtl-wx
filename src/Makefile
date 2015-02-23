@@ -1,4 +1,4 @@
-VERSION_STRING = v3.1
+VERSION_STRING = v3.2
 BUILD_DATE_STRING=$(shell date +"%m-%d-%Y")
 
 # Compile flag to activate Efergy energy sensor support.  These sensors
