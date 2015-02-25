@@ -43,7 +43,6 @@ cmake ../
 make
 cd ~/rtl-wx/src
 
-
 c) Build rtl-wx
 
 cd ~/rtl-wx/src
@@ -51,6 +50,10 @@ edit Makefile to make sure Raspberry Pi settings are uncommented and all others 
 make clean
 make
 cd ../bin
+
+Note: If rtl-wx build complains about convenience.h not found, 
+      copy from rtl-wx\src\librtlsdr\src\convenience to rtl-wx\src\librtlsdr\include 
+
 
 9) Install apache2 web server (for local web control see sample sites-available/default file)
 
