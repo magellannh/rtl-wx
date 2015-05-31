@@ -24,7 +24,7 @@ sudo /etc/init.d/samba restart
 
 a) Get rtl-wx software and expand to /home/pi/rtl-wx
 
-wget https://github.com/magellan/rtl-wx/archive/v0.1.0.tar.gz
+wget https://github.com/magellannh/rtl-wx/archive/v0.1.0.tar.gz
 tar -xvf
 mv v0.1.0.tar.gz rtl-wx
 
