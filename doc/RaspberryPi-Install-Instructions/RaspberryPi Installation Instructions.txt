@@ -6,8 +6,8 @@ Installing RTL-Wx on Raspberry Pi
 3) Insert SD card into Pi and boot with monitor/keyboard
 4) Use init menu to create initial config (timezone, ssh, etc)
 5) Remove monitor/keyboard and reboot
-6) Use PuTTy SSH tool to remotely contact pi (login as: pi password: raspberry
-7) Install samba server on pi (only needed to copy files, could download)
+6) Use PuTTy SSH tool to remotely contact pi (default login is: pi, raspberry)
+7) Install samba server on pi (this is only needed to copy files, you could download files instead)
 
 sudo apt-get update
 sudo apt-get install samba samba-common-bin
@@ -23,6 +23,7 @@ sudo /etc/init.d/samba restart
 8) Copy rtl-wx folder to Raspberry pi home folder
 
 a) Get rtl-wx software and expand to /home/pi/rtl-wx
+(This is if you don't enable samba to manually copy files over
 
 wget https://github.com/magellannh/rtl-wx/archive/v0.1.0.tar.gz
 tar -xvf
@@ -31,6 +32,9 @@ mv v0.1.0.tar.gz rtl-wx
 NOTE: If you don't need to modify sources, you can use the prebuilt RaspberryPi binary in rtl-wx/bin and skip steps 8b, and 8c.  In this case, copy rtl-wx and rtl-433 from rtl-wx/bin/RaspberryPi to rtl-wx/bin and also copy rtl-wx/bin/RaspberryPi/header.htm to rtl-wx/www/misc/header.htm.
 
 b) Download and build librtlsdr
+
+sudo apt-get install cmake
+sudo apt-get install libusb-1.0
 
 cd ~
 wget https://github.com/steve-m/librtlsdr/archive/v0.5.3.tar.gz
@@ -80,6 +84,7 @@ sudo vi /etc/apache2/sites-available/default
 sudo vi /etc/apache2/envvars
    - Change APACHE_RUN_USER and APACHE_RUN_GROUP to pi
 
+sudo rm -r /var/lock/apache2
 sudo service apache2 restart
 
 Note: if above is done and cgi scripts don't produce any output, it's probably an
@@ -106,17 +111,18 @@ can also use: fswebcam -r 1280x720 --no-banner webcam.jpg
 12) Install NooElec RTL-SDR USB Dongle (rtl2832u w/ R820T)
 
 a) (use apt-get install to install any missing libs)
-b) copy rtl-sdr.rules from src/librtlsrc/src folder to /etc/udev/rules.d/15-rtl-sdr.rules (maybe don't need to rename?)
+b) copy rtl-sdr.rules from src/librtlsdr folder to /etc/udev/rules.d/15-rtl-sdr.rules (maybe don't need to rename?)
+ sudo cp ~/rtl-wx/src/librtlsdr/rtl-sdr.rules /etc/udev/rules.d/15-rtl-sdr.rules
 
-d) blacklist device so kernel doesn't claim it
+c) blacklist device so kernel doesn't claim it
 sudo vi /etc/modprobe.d/raspi-blacklist.conf
 add the following lines:
-  blacklist dvb_usb_rtl28xxu
-  blacklist rtl2832
-  blacklist rtl2830
-  blacklist rtl2838
+blacklist dvb_usb_rtl28xxu
+blacklist rtl2832
+blacklist rtl2830
+blacklist rtl2838
  
-sudo reboot
+Reboot using: sudo reboot
 
 had good  luck with rdl-433 using:
 ./rtl-433 -f 433810000 -l 7000
@@ -125,7 +131,8 @@ had good  luck with rdl-433 using:
 
 13) Edit /etc/rc.local to launch RTL-Wx at startup.
 
-/home/pi/rtl-wx/bin/rtl-wx -w /home/pi/rtl-wx/www&
+sudo vi /etc/rc.local
+add line:  /home/pi/rtl-wx/bin/rtl-wx -w /home/pi/rtl-wx/www&
 
 
 
