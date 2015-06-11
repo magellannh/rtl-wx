@@ -134,5 +134,8 @@ had good  luck with rdl-433 using:
 sudo vi /etc/rc.local
 add line:  /home/pi/rtl-wx/bin/rtl-wx -w /home/pi/rtl-wx/www&
 
-
+Notes:
+  CPU utilization and temperature with rtl-wx running (6 weather sensors and 2 electricity monitors)
+    Pi 1 Model B+ ~20% cpu load and temperature around 59 degrees C
+    Pi 2 Model B  ~10% cpu load and temperature around 47 degrees C
 
